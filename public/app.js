@@ -1,3 +1,4 @@
+import { setupModelManager } from './model-manager.js';
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -9,17 +10,22 @@ let lib,current=null,currentId='',reviewId='',timer,history=[],weights={quality:
 async function api(url,options={}){const r=await fetch(url,{...options,headers:{'Content-Type':'application/json',...options.headers}});const data=await r.json();if(!r.ok)throw new Error(data.error||'请求失败');return data;}
 function toast(text){$('#toast').textContent=text;$('#toast').style.display='block';clearTimeout(timer);timer=setTimeout(()=>$('#toast').style.display='none',6500);}
 function guard(fn){return async event=>{event?.preventDefault();try{await fn(event);}catch(e){toast(e.message);}};}
-function switchView(name){$$('.view').forEach(x=>x.hidden=x.id!==`view-${name}`);$$('.nav').forEach(x=>x.classList.toggle('active',x.dataset.view===name));$('#breadcrumb').textContent={experiments:'实验与分析',prompts:'提示词策略',datasets:'测试数据集',guide:'方法与接入'}[name];window.scrollTo(0,0);}
+function switchView(name){$$('.view').forEach(x=>x.hidden=x.id!==`view-${name}`);$$('.nav').forEach(x=>x.classList.toggle('active',x.dataset.view===name));$('#breadcrumb').textContent={experiments:'实验与分析',models:'模型管理',prompts:'提示词策略',datasets:'测试数据集',guide:'方法与接入'}[name];window.scrollTo(0,0);}
 $$('.nav').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
 async function loadLibrary(){lib=await api('/api/library');renderLibrary();}
 function renderLibrary(){
+  const previousModels=$$('input[name="model_ids"]:checked').map(input=>input.value),hadModels=$$('#model-choices input').length>0;
+  const previousPrompts=$$('input[name="prompt_ids"]:checked').map(input=>input.value),hadPrompts=$$('#prompt-choices input').length>0;
+  const previousDataset=$('#run-dataset').value;
   $('#prompt-count').textContent=lib.prompts.length;
-  $('#live-status').textContent=lib.live_enabled?'LIVE 已启用 · 密钥仅本机':'MOCK READY · LIVE 关闭';
+  $('#live-status').textContent=lib.live_enabled?'LIVE 可用 · 会话凭证':'MOCK READY · 添加模型即可接入';
   $('#live-status').classList.toggle('live',lib.live_enabled);
   $('#run-dataset').innerHTML=lib.datasets.map(d=>`<option value="${esc(d.id)}">${esc(d.name)} · ${d.cases.length}题 / v${d.version}</option>`).join('');
-  $('#model-choices').innerHTML=lib.models.map(m=>`<label class="check choice"><input type="checkbox" name="model_ids" value="${esc(m.id)}" ${m.kind==='mock'?'checked':''}><span>${esc(m.label)}</span><small>${m.kind==='agentlab'?'HTTP 8811':m.mode==='mock'?'MOCK':m.ready?'LIVE KEY 就绪':'LIVE KEY 未配置'}</small></label>`).join('');
-  $('#prompt-choices').innerHTML=lib.prompts.map((p,i)=>`<label class="check choice"><input type="checkbox" name="prompt_ids" value="${esc(p.id)}" ${i<3?'checked':''}><span>${esc(p.name)}</span><small>VERSION ${p.version}</small></label>`).join('');
-  $('#model-settings').innerHTML=lib.models.filter(m=>m.kind==='chat').map(m=>`<details><summary>${esc(m.label)} · 环境变量 ${esc(m.key_env)}</summary><div class="form-grid"><label>模型版本<input name="${m.id}_model" value="${esc(m.model)}"></label><label>兼容 API Base URL<input name="${m.id}_base_url" value="${esc(m.base_url)}"></label><label>输入 USD / 百万 Token<input name="${m.id}_input_price_per_million" type="number" min="0" step="0.01" placeholder="未知留空"></label><label>输出 USD / 百万 Token<input name="${m.id}_output_price_per_million" type="number" min="0" step="0.01" placeholder="未知留空"></label></div></details>`).join('');
+  $('#model-choices').innerHTML=lib.models.map(m=>`<label class="check choice"><input type="checkbox" name="model_ids" value="${esc(m.id)}" ${(hadModels?previousModels.includes(m.id):m.kind==='mock')?'checked':''} ${(m.mode==='live'&&!m.ready)?'disabled':''}><span>${esc(m.label)}${m.is_default?' · 默认':''}</span><small>${m.kind==='agentlab'?(m.mode==='live'?'授权对照':'本机 MOCK'):m.mode==='mock'?'MOCK':m.ready?'LIVE 就绪':'需填写密钥'}</small></label>`).join('')+'<button type="button" class="model-manage-link" id="open-model-manager">＋ 添加或管理实时模型</button>';
+  $('#open-model-manager').onclick=()=>{$('.nav[data-view="models"]').click();};
+  $('#prompt-choices').innerHTML=lib.prompts.map((p,i)=>`<label class="check choice"><input type="checkbox" name="prompt_ids" value="${esc(p.id)}" ${(hadPrompts?previousPrompts.includes(p.id):i<3)?'checked':''}><span>${esc(p.name)}</span><small>VERSION ${p.version}</small></label>`).join('');
+  if(lib.datasets.some(dataset=>dataset.id===previousDataset))$('#run-dataset').value=previousDataset;
+  $('#model-settings').innerHTML=lib.models.filter(m=>m.kind==='chat'&&m.key_env).map(m=>`<details><summary>${esc(m.label)} · 兼容环境配置</summary><div class="form-grid"><label>模型版本<input name="${esc(m.id)}_model" value="${esc(m.model)}"></label><label>API Base URL<input name="${esc(m.id)}_base_url" value="${esc(m.base_url)}"></label><label>输入 USD / 百万 Token<input name="${esc(m.id)}_input_price_per_million" type="number" min="0" step="0.01" placeholder="未知留空"></label><label>输出 USD / 百万 Token<input name="${esc(m.id)}_output_price_per_million" type="number" min="0" step="0.01" placeholder="未知留空"></label></div></details>`).join('');
   $('#prompt-list').innerHTML=lib.prompts.map(p=>`<article class="prompt-card"><span class="version">${esc(p.id)} · V${p.version}</span><h3>${esc(p.name)}</h3><p>${esc(p.content)}</p><button class="button small" data-edit-prompt="${esc(p.id)}">编辑 / 新版本</button> <button class="button small danger" data-delete-prompt="${esc(p.id)}">删除</button><p class="hint">历史版本 ${p.history?.length||0} · 实验快照保留原内容</p></article>`).join('');
   $$('[data-edit-prompt]').forEach(b=>b.onclick=()=>{const p=lib.prompts.find(p=>p.id===b.dataset.editPrompt);for(const k of ['id','name','content'])$('#prompt-form').elements[k].value=p[k];$('#prompt-editor-title').textContent=`编辑 ${p.name} · 保存为 v${p.version+1}`;$('#prompt-form').scrollIntoView({behavior:'smooth'});});
   $$('[data-delete-prompt]').forEach(b=>b.onclick=guard(async()=>{await api(`/api/prompts/${b.dataset.deletePrompt}`,{method:'DELETE'});await loadLibrary();toast('策略已删除，既有实验快照保留。');}));
@@ -28,19 +34,21 @@ function renderLibrary(){
   $$('[data-delete-dataset]').forEach(b=>b.onclick=guard(async()=>{await api(`/api/datasets/${b.dataset.deleteDataset}`,{method:'DELETE'});await loadLibrary();toast('数据集已删除，既有实验数据快照保留。');}));
   matrix();
 }
-function matrix(){if(!lib)return;const m=$$('input[name="model_ids"]:checked').length,p=$$('input[name="prompt_ids"]:checked').length,c=lib.datasets.find(d=>d.id===$('#run-dataset').value)?.cases.length||0,r=Number($('#run-form').elements.repeats.value)||1;$('#matrix-preview').textContent=`${m} 模型 × ${p} 策略 × ${c} 样本 × ${r} 次 = ${m*p*c*r} 单元`;} 
+function matrix(){if(!lib)return;const selected=$$('input[name="model_ids"]:checked').map(input=>input.value),m=selected.length,p=$$('input[name="prompt_ids"]:checked').length,c=lib.datasets.find(d=>d.id===$('#run-dataset').value)?.cases.length||0,r=Number($('#run-form').elements.repeats.value)||1;$('#run-form').elements.temperature.max=lib.models.some(model=>selected.includes(model.id)&&model.kind==='chat'&&model.protocol==='anthropic'&&model.send_temperature!==false)?'1':'2';$('#matrix-preview').textContent=`${m} 模型 × ${p} 策略 × ${c} 样本 × ${r} 次 = ${m*p*c*r} 单元`;}
 $('#run-form').oninput=matrix;
 $('#toggle-config').onclick=()=>{$('#config-panel').hidden=!$('#config-panel').hidden;if(!$('#config-panel').hidden)$('#config-panel').scrollIntoView({behavior:'smooth'});};
-$('#agent-preset').onclick=()=>{$$('input[name="model_ids"]').forEach(x=>x.checked=x.value.startsWith('agentlab-'));$('#run-form').elements.name.value='AgentLab 单 Agent / 多 Agent 对照';$('#run-form').elements.temperature.value=0;matrix();toast('已选择 AgentLab 两种架构。请先确认 8811 服务已启动；同模型与搜索预算在高级配置中冻结。');};
+$('#agent-preset').onclick=()=>{const bridges=lib.models.filter(model=>model.id.startsWith('bridge-'));const selected=bridges.length?bridges.slice(0,2).map(model=>model.id):['agentlab-single','agentlab-multi'];$$('input[name="model_ids"]').forEach(x=>x.checked=selected.includes(x.value));$('#run-form').elements.name.value='AgentLab 单 Agent / 多 Agent 对照';$('#run-form').elements.temperature.value=0;matrix();toast(bridges.length?'已选择同一授权模型的 Single / Multi。请确认本次实时调用，并设置可比较的每题预算。':'已选择 AgentLab 两种 Mock 架构。实时对照可先在模型管理中连接授权模型。');};
 $('#run-form').onsubmit=guard(async()=>{
   const f=new FormData($('#run-form')),body=Object.fromEntries(f);body.model_ids=f.getAll('model_ids');body.prompt_ids=f.getAll('prompt_ids');body.confirm_live=f.has('confirm_live');body.judge_enabled=f.has('judge_enabled');body.model_overrides={};
-  for(const m of lib.models.filter(m=>m.kind==='chat'))body.model_overrides[m.id]=Object.fromEntries(['model','base_url','input_price_per_million','output_price_per_million'].map(k=>[k,f.get(`${m.id}_${k}`)]));
+  for(const m of lib.models.filter(m=>m.kind==='chat'&&m.key_env))body.model_overrides[m.id]=Object.fromEntries(['model','base_url','input_price_per_million','output_price_per_million'].map(k=>[k,f.get(`${m.id}_${k}`)]));
   body.model_overrides['judge-qwen']={input_price_per_million:f.get('judge_input_price')||null,output_price_per_million:f.get('judge_output_price')||null};
   const state=await api('/api/runs',{method:'POST',body:JSON.stringify(body)});currentId=state.id;$('#config-panel').hidden=true;await loadHistory();await loadRun();toast('Promptfoo 实验已启动；缓存关闭，正在逐单元保存结果。');
 });
 async function loadHistory(){history=await api('/api/runs');$('#history-select').innerHTML=history.length?history.map(r=>`<option value="${r.id}">${r.execution_mode.toUpperCase()} · ${esc(r.name)} · ${r.completed}/${r.total} · ${r.status}</option>`).join(''):'<option value="">暂无实验</option>';if(!currentId&&history.length)currentId=history[0].id;if(currentId)$('#history-select').value=currentId;}
 $('#history-select').onchange=guard(async()=>{currentId=$('#history-select').value;await loadRun();});
 $('#refresh').onclick=guard(async()=>{await loadHistory();await loadRun();});
+async function loadLegacy(){const data=await api('/api/legacy');$('#legacy-history').hidden=!(data.available&&data.unowned_runs>0);$('#legacy-history-count').textContent=`发现 ${data.unowned_runs} 个旧版单用户实验。认领后归属当前浏览器会话，冻结结果会保留。`;}
+$('#import-legacy-history').onclick=guard(async()=>{if(!window.confirm('将本机旧版单用户实验归属当前浏览器会话？此操作只允许执行一次，其他会话无法读取。'))return;await api('/api/legacy/import',{method:'POST',body:JSON.stringify({confirm:true})});await loadLegacy();await loadHistory();await loadRun();toast('旧实验已归属当前会话，原始配置和结果保留。');});
 const query=()=>new URLSearchParams(weights).toString();
 async function loadRun(){if(!currentId)return;current=await api(`/api/runs/${currentId}?${query()}`);renderRun();}
 function renderRun(){
@@ -76,5 +84,5 @@ $('#new-prompt').onclick=()=>{$('#prompt-form').reset();$('#prompt-form').elemen
 $('#prompt-form').onsubmit=guard(async()=>{await api('/api/prompts',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData($('#prompt-form'))))});await loadLibrary();$('#prompt-form').reset();$('#prompt-form').elements.id.value='';toast('提示词已保存。既有实验的冻结版本不受影响。');});
 $('#dataset-file').onchange=guard(async()=>{const file=$('#dataset-file').files[0];if(!file)return;if(file.size>2_000_000)throw new Error('文件超过2MB');$('#dataset-form').elements.content.value=await file.text();$('#dataset-form').elements.format.value=file.name.endsWith('.csv')?'csv':'json';if(!$('#dataset-form').elements.name.value)$('#dataset-form').elements.name.value=file.name.replace(/\.(json|csv)$/i,'');});
 $('#dataset-form').onsubmit=guard(async()=>{const data=await api('/api/datasets',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData($('#dataset-form'))))});await loadLibrary();toast(`已校验导入 ${data.cases.length} 条样本，SHA256 ${data.hash.slice(0,12)}…`);});
-await loadLibrary().catch(e=>toast(e.message));await loadHistory().catch(e=>toast(e.message));await loadRun().catch(e=>toast(e.message));
+await loadLibrary().catch(e=>toast(e.message));await setupModelManager({api,guard,toast,reloadLibrary:loadLibrary}).catch(e=>toast(e.message));await loadHistory().catch(e=>toast(e.message));await loadLegacy().catch(e=>toast(e.message));await loadRun().catch(e=>toast(e.message));
 setInterval(async()=>{if(current?.state.status==='running'){try{await loadRun();if(current.state.status!=='running')await loadHistory();}catch(e){toast(e.message);}}},1800);

@@ -2,7 +2,7 @@
 
 一个基于 **Promptfoo 0.124.1** 的本地中文评测工作台。它调用 Promptfoo 的原生 `evaluate()`、`is-json`、`contains`、`javascript` 和可选 `llm-rubric`，围绕原生引擎提供提示词版本、数据导入、冻结配置、稳定性、失败案例和实验审计。
 
-**当前已验证的是 Mock 流水线与本地 HTTP/HTTPS 协议夹具，没有运行 Kimi、Qwen 或 Judge 的真实云端模型实验。** Mock 模型直接读取人工参考答案，含预置错误；这些分数不能证明模型能力或 Agent 架构优劣。真实模型接入代码已实现，需使用你自己的环境配置并单独运行。
+**已验证 Mock 流水线、原生 Promptfoo 多选矩阵和 OpenAI/Anthropic 本地协议夹具；没有发起真实云端模型付费调用。** Mock 模型直接读取人工参考答案，含预置错误；这些分数不能证明模型能力或 Agent 架构优劣。可在网页「模型管理」填写自己的账号模型与密钥，再明确授权连接测试或实验。
 
 ## 5 分钟运行
 
@@ -34,7 +34,9 @@ node --env-file-if-exists=.env src/server.js
 
 | 功能 | 行为 |
 |---|---|
-| 多模型 | 两个清晰标记的 Mock provider；Kimi / Qwen OpenAI 兼容 Chat Completions；AgentLab single / multi HTTP provider |
+| 多模型 | 独立网页配置 Kimi、Qwen、DeepSeek、GLM、OpenAI、Anthropic、自定义 API；OpenAI Chat 与 Anthropic Messages 原生协议；保留 Mock、环境变量与 AgentLab single / multi |
+| 配置管理 | 创建/编辑/删除/默认模型；密码显示开关；只删除凭证；明确授权的最小连接测试；401/403、404、429、超时、网络与协议错误分别显示 |
+| 凭证与会话 | 随机 HttpOnly、SameSite=Strict cookie；配置与实验按会话隔离；模型定义持久化、API Key/联动Token只在后端内存；worker仅通过IPC取得所选凭证 |
 | 提示词 | 默认直接回答、结构化证据、交叉核查三策略；创建、编辑生成版本、历史、删除；旧实验保留原文 |
 | 数据集 | CSV / JSON 导入、必填校验、重复ID校验、JSON参考结构校验、安全断言白名单；1–200题 |
 | 批量实验 | 模型 × 提示词 × 题目 × 重复次数；最大1500单元；缓存关闭；有限并发 |
@@ -90,7 +92,21 @@ reports/                  已实际运行的Mock报告与复现快照
 data/                     本机运行时数据；Git忽略
 ```
 
-## 真实模型配置
+## 网页模型配置（推荐）
+
+打开左侧「模型管理」，选择供应商和协议，填写账号实际可用的模型 ID、HTTPS Base URL、API Key、温度与输出 Token 上限。供应商预设只提供端点，模型名称由你填写。保存后可设默认、编辑、删除配置或仅删除凭证；API Key 保存后清空输入框，不通过查询接口返回，也不存浏览器 localStorage。
+
+能力由配置显式声明：可以关闭 temperature（部分推理模型不支持），选择 `max_tokens` / `max_completion_tokens`，并标记是否支持原生工具调用。`auto` 对 OpenAI 选 `max_completion_tokens`，其余选 `max_tokens`；Anthropic 固定原生 `max_tokens`。不要仅凭供应商名称推定某个型号支持 temperature 或工具。
+
+点击「测试连接 · 真实 API」发送最多16输出Token的最小请求，因此也可能产生费用。实验仍须单独勾选本次实时授权。网页模型无需再设置 `STUDIO_ENABLE_LIVE`，旧环境变量模型继续受该开关控制。测试结果仅说明端点、凭证与协议可用，不是模型质量评价。
+
+同一网页模型可与多个其他模型一起参与原生 Promptfoo 的模型 × 提示词 × 题目 × 重复矩阵。每个模型的配置版本、credential ID、能力与实际参数冻结；`settings.effective_model_parameters`明确记录逐模型实际温度/Token上限。网页模型使用自己的保存参数，环境变量模型使用实验表单参数。
+
+模型定义保存在 `data/model-definitions.json`，不含 API Key。重启后同一浏览器仍可查看定义，凭证显示未配置，需重新填 Key。修改已存在的 Key 创建新凭证版本，旧冻结实验继续使用旧版本；明确删除凭证会删除此模型的全部内存版本并取消相关运行，旧快照随后不能调用或复跑。补充当前缺失 Key 保留其 credential ID；历史版本可在网页恢复选择中显式补充。已存在的历史版本不能被覆盖。
+
+会话 cookie 是本地工作区访问凭证。不同浏览器/无痕会话看不到对方模型、实验或导出，也不能操作对方实验；这是本地会话隔离，不是账号登录。首次建立的本机会话拥有旧单用户资料和 `.env` 使用权。升级前无 owner 的旧实验保留原文件，只有该会话可以明确执行「认领本机旧实验」，迁移后实验读写与导出同样受会话保护。请保留原浏览器的 cookie。
+
+## 环境变量配置（兼容旧版）
 
 复制 `.env.example` 为 `.env`，只在本机填写，不提交密钥：
 
@@ -104,11 +120,13 @@ QWEN_MODEL=你账户可用的模型或固定版本
 STUDIO_ENABLE_LIVE=1
 ```
 
-不同账号、区域和时间可用的模型与端点可能不同，请按供应商账号文档核对；仓库默认模型名称只是可修改的配置。界面高级设置可以修改非秘密的模型版本、端点、输入/输出USD每百万Token价格。密钥只读取固定环境变量，不返回前端，不写冻结配置。
+不同账号、区域和时间可用的模型与端点可能不同，请按供应商账号文档核对；仓库默认模型名称只是可修改的配置。`.env.example`也列出 DeepSeek、GLM、OpenAI、Anthropic 和自定义配置。界面高级设置保留旧环境变量模型的版本、端点、价格覆盖。环境变量 Key 不返回前端、不写快照；仅首次本机会话或命令行可使用。
 
 实时调用需要同时满足：服务环境 `STUDIO_ENABLE_LIVE=1`、相应Key已配置、选择实时provider、勾选当次费用授权。默认不会偷偷调用云端服务。所有保存的报告都明确标注执行模式。
 
-Node 24 的子进程启用 `NODE_USE_ENV_PROXY=1`，继承本机 HTTP(S)_PROXY，并把 localhost / 127.0.0.1 加入 NO_PROXY；不记录代理凭据。若账号网络环境不需要代理，留空即可。
+外部 API 必须 HTTPS，拒绝 URL 内嵌凭据、私网/loopback/link-local/保留地址与重定向；DNS 检查全部 A/AAAA，并固定校验后的 IP 连接，同时保留原 Host/SNI 与 TLS 证书验证。为避免 DNS 重绑定和代理绕过，模型传输不读取系统代理。测试中的 HTTP loopback 只通过显式依赖注入，不是生产配置豁免。
+
+worker 环境剔除 Key/Token/Secret/Password 和代理变量，仅通过 IPC 获取本场选中的凭证；snapshot、Promptfoo 配置、原始结果、引擎日志和导出不携带密钥。HTTP 错误正文不保存，成功响应意外回显当前凭证也会清洗。无服务端 usage 或价格时指标保持未知；Anthropic缓存输入计入总Token，缓存计费缺少专用单价时费用保持未知。
 
 ### 超时、重试与成本
 
@@ -142,6 +160,10 @@ CSV模板见 `examples/import-example.csv`，JSON示例见 `examples/research-ca
 在输出明细点击「查看 / 复核」，核对原始输出、原生断言、参考答案、来源和trace；完成或取消实验后可保存人工分类与说明。自动评分保持原样。CSV导出会对可能被Excel当公式的字符串加单引号，JSON保留原始文本。
 
 ## AgentLab 联动
+
+实时联动先在 AgentLab 的「模型配置」为指定模型生成限时授权，在 Studio「模型管理」的联动区填写 `http://127.0.0.1:8811`、模型配置 ID 与授权 Token。Studio 后端通过 Bearer token 获取该指定模型的非秘密元信息，验证后添加相同模型的 single/multi 选项。Token仅在内存，不回读、不持久化；远端授权到期/撤销后调用拒绝，Studio断开连接也会删除本地Token并取消相关运行。
+
+桥接只接受显式 loopback IP 的 HTTP 本地服务。每次 benchmark 请求带 `model_config_id`、`expected_config_version` 和 Bearer grant；远端版本改变返回409，避免单/多架构运行期间换模型。两架构采用同一模型配置、研究提示词、数据、温度/Token上限、每题内部调用预算与超时，结果保存 AgentLab 实际冻结 `model_config` 供核对。API Key 本身不会跨项目共享。旧的无Key Mock联动仍可直接运行。
 
 先独立启动AgentLab（<http://127.0.0.1:8811>），点击「AgentLab 单 / 多对照」。两架构接受相同题目、模型provider、temperature、研究策略、每题内部调用预算和超时。调用契约：
 
@@ -184,18 +206,22 @@ CSV模板见 `examples/import-example.csv`，JSON示例见 `examples/research-ca
 
 `GET /api/health`、`GET /api/library`；提示词`POST/DELETE /api/prompts`；数据集`POST/DELETE /api/datasets`；实验`POST/GET /api/runs`、`GET /api/runs/:id`、`POST .../cancel`、`POST .../replay`；复核`PATCH .../rows/:rowId`；导出`GET .../export/{json,csv,markdown,config,raw}`。
 
+模型：`GET/POST /api/models`、`PATCH/DELETE /api/models/:id`、`POST /api/models/:id/default`、`POST .../test {confirm_live:true}`、`DELETE .../credential`、`POST .../credential {api_key,credential_id?}`。联动：`GET /api/integration`、`POST /api/integration/import {url,token,model_config_id}`、`DELETE /api/integration/:id`。旧记录：`GET /api/legacy`、`POST /api/legacy/import {confirm:true}`。所有请求应保存并发送自己的会话 cookie；Token导入与Key写入的响应都不回读秘密。
+
 ```json
 POST /api/runs
 {"name":"Mock比较","dataset_id":"research-12","model_ids":["mock-kimi","mock-qwen"],"prompt_ids":["direct","structured","verify"],"repeats":2}
 ```
 
-本地自动化13项测试已通过，覆盖24单元原生Promptfoo矩阵、JSON错误字段、导入拒绝、配置冻结、未知指标、未完成重复组与未启动单元、Judge基础设施失败、HTTP429重试/400终止、并发成本预留、API实验/标注/导出/复跑/取消/恢复以及跨站写入拒绝。测试HTTP服务是本机夹具，不使用云端模型Key。GitHub Actions定义了Windows/Ubuntu Node24检查；远端CI实际状态以仓库Actions为准。
+本地自动化覆盖原有24单元 Mock 原生Promptfoo矩阵与新增16单元 OpenAI/Anthropic混合协议矩阵、模型CRUD/默认/凭证版本恢复、会话实验全部入口隔离、旧记录迁移与 `.env` 归属、JSON错误不反射密钥、SSRF/DNS固定/重定向拒绝、HTTP错误分类、重试与未知费用。测试HTTP服务是本机夹具，不使用云端模型Key。GitHub Actions定义了Windows/Ubuntu Node24检查；远端CI实际状态以仓库Actions为准。
 
 ## 框架依据与范围
 
 开发前核验npm registry稳定版`promptfoo@0.124.1`及Node要求；SDK的`evaluate()`返回Eval记录，再`await record.toEvaluateSummary()`。官方依据：[Node包](https://www.promptfoo.dev/docs/usage/node-package/)、[Node API](https://www.promptfoo.dev/docs/usage/node-api-reference/)、[配置](https://www.promptfoo.dev/docs/configuration/reference/)、[断言](https://www.promptfoo.dev/docs/configuration/expected-outputs/)、[Judge偏差](https://www.promptfoo.dev/docs/guides/llm-as-a-judge/)。
 
-没有多用户登录、分布式调度或多租户隔离；只用于可信本机实验。默认关闭Promptfoo遥测、更新检查与共享，评测数据不主动上传；开启实时provider才会把所选问题/提示词发送给模型服务。源码MIT许可。
+没有账号登录或分布式调度；只用于本机实验，会话级模型/实验隔离已实现。默认关闭Promptfoo遥测、更新检查与共享；明确授权实时provider后会把所选问题/提示词发送给模型服务。源码MIT许可。
+
+协议依据：[OpenAI Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)、[Anthropic Messages](https://platform.claude.com/docs/en/api/messages/create)、[Anthropic缓存usage](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)、[OWASP SSRF](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)。
 
 ## 2 分钟演示顺序
 

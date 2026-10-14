@@ -9,9 +9,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { atomic, read } from './storage.js';
 import { normalize, analyze, csv, markdown } from './analysis.js';
+import {installWorkerCredentials} from './credentials.js';
 
 const dir=process.argv[2];
 try {
+  const supplied=await new Promise(resolve=>process.once('message',msg=>resolve(msg.type==='credentials'?msg.credentials:[])));
+  installWorkerCredentials(supplied);
   const { evaluate }=await import('promptfoo');
   const config=read(path.join(dir,'promptfooconfig.json'));
   const snapshot=read(path.join(dir,'snapshot.json'));
@@ -35,6 +38,6 @@ try {
   process.send?.({type:'complete',completed:rows.length,engine_id:record.id},()=>process.disconnect?.());
 } catch(error) {
   executionFinished=true;
-  process.send?.({type:'failed',error:error.stack||error.message},()=>process.disconnect?.());
+  process.send?.({type:'failed',error:'Promptfoo 执行失败；冻结配置与已完成结果已保留。请核对配置和模型能力。'},()=>process.disconnect?.());
   process.exitCode=1;
 }
