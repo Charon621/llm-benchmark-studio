@@ -189,7 +189,7 @@ POST /api/runs
 {"name":"Mock比较","dataset_id":"research-12","model_ids":["mock-kimi","mock-qwen"],"prompt_ids":["direct","structured","verify"],"repeats":2}
 ```
 
-本地自动化12项测试已通过，覆盖24单元原生Promptfoo矩阵、JSON错误字段、导入拒绝、配置冻结、未知指标、未完成重复组、Judge基础设施失败、HTTP429重试/400终止、并发成本预留、API实验/标注/导出/复跑/取消/恢复以及跨站写入拒绝。测试HTTP服务是本机夹具，不使用云端模型Key。GitHub Actions定义了Windows/Ubuntu Node24检查；远端CI实际状态以仓库Actions为准。
+本地自动化13项测试已通过，覆盖24单元原生Promptfoo矩阵、JSON错误字段、导入拒绝、配置冻结、未知指标、未完成重复组与未启动单元、Judge基础设施失败、HTTP429重试/400终止、并发成本预留、API实验/标注/导出/复跑/取消/恢复以及跨站写入拒绝。测试HTTP服务是本机夹具，不使用云端模型Key。GitHub Actions定义了Windows/Ubuntu Node24检查；远端CI实际状态以仓库Actions为准。
 
 ## 框架依据与范围
 

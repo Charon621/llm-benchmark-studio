@@ -15,14 +15,15 @@ export function normalize(result,index=0) {
   else if (!result.success) category='指令遵循';
   return {id:`cell-${index}`,case_id:v.case_id||t.metadata?.case_id,question:v.question,reference:v.reference,repeat_index:v.repeat_index??0,difficulty:v.difficulty,model:typeof result.provider==='object'?result.provider.label||result.provider.id:result.provider,prompt:result.prompt?.label||result.prompt?.display||String(result.promptIdx??''),success:Boolean(result.success)&&!error,evaluation_error,score:result.score??null,reference_score:metrics.reference_terms?.score??null,judge_score:evaluation_error?null:metrics.judge_quality?.score??null,json_pass:metrics.json_compliance?.pass??null,rule_score:metrics.rule?.score??null,latency_ms:response.metadata?.latency_ms??result.latencyMs??null,input_tokens:response.metadata?.input_tokens??null,output_tokens:response.metadata?.output_tokens??null,cost_usd:response.metadata?.cost_usd??null,output:typeof response.output==='string'?response.output:JSON.stringify(response.output??''),error,category,grading:result.gradingResult,metadata:response.metadata||{},human_review:null};
 }
-export function analyze(rows, weights={}, expectedRepeats=2) {
+export function analyze(rows, weights={}, expectedRepeats=2, expectedTotalCells=null) {
   weights={quality:50,speed:20,cost:0,stability:30,...weights};
+  const matrixComplete=expectedTotalCells==null||rows.length===expectedTotalCells;
   const ids=[...new Set(rows.map(r=>r.model))];
   const summary=ids.map(id=>{
     const all=rows.filter(r=>r.model===id), groups=new Map();
     for (const r of all) { const key=`${r.case_id}/${r.prompt}`;if (!groups.has(key)) groups.set(key,[]);groups.get(key).push(r); }
     const stabilityGroups=[...groups.values()].filter(a=>expectedRepeats>=2&&a.length===expectedRepeats&&new Set(a.map(r=>r.repeat_index)).size===expectedRepeats);
-    const stability=stabilityGroups.length===groups.size?mean(stabilityGroups.map(a=>a.some(x=>x.error)?null:Math.max(...[...new Set(a.map(x=>hash(x.output)))].map(h=>a.filter(x=>hash(x.output)===h).length))/a.length)):null;
+    const stability=matrixComplete&&stabilityGroups.length===groups.size?mean(stabilityGroups.map(a=>a.some(x=>x.error)?null:Math.max(...[...new Set(a.map(x=>hash(x.output)))].map(h=>a.filter(x=>hash(x.output)===h).length))/a.length)):null;
     const costs=all.map(r=>r.cost_usd),tokens=all.map(r=>r.input_tokens==null||r.output_tokens==null?null:r.input_tokens+r.output_tokens);
     return {model:id,count:all.length,evaluation_error_count:all.filter(r=>r.evaluation_error).length,pass_rate:rate(all.filter(r=>!r.evaluation_error).map(r=>r.success)),reference_score:mean(all.map(r=>r.reference_score)),judge_score:mean(all.map(r=>r.judge_score)),json_rate:rate(all.filter(r=>r.json_pass!=null).map(r=>r.json_pass)),avg_latency_ms:mean(all.map(r=>r.latency_ms)),total_tokens:tokens.every(x=>x!=null)?tokens.reduce((a,b)=>a+b,0):null,known_token_cells:tokens.filter(x=>x!=null).length,total_cost_usd:costs.every(x=>x!=null)?costs.reduce((a,b)=>a+b,0):null,avg_cost_usd:costs.every(x=>x!=null)?mean(costs):null,known_cost_cells:costs.filter(x=>x!=null).length,stability,failure_rate:rate(all.filter(r=>!r.evaluation_error).map(r=>!r.success))};
   });

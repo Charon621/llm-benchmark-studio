@@ -27,7 +27,7 @@ try {
   if (!rows.length && raw.results?.length) rows.push(...raw.results.map(normalize));
   atomic(path.join(dir,'raw-results.json'),raw);
   atomic(path.join(dir,'rows.json'),rows);
-  const result=analyze(rows,{quality:50,speed:20,cost:0,stability:30},snapshot.settings.repeats);
+  const result=analyze(rows,{quality:50,speed:20,cost:0,stability:30},snapshot.settings.repeats,snapshot.total_cells);
   atomic(path.join(dir,'report.json'),{snapshot,analysis:result,rows});
   fs.writeFileSync(path.join(dir,'results.csv'),csv(rows),'utf8');
   fs.writeFileSync(path.join(dir,'report.md'),markdown(snapshot,rows,result,read(path.join(dir,'ledger.json'))),'utf8');

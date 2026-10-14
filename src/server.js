@@ -40,7 +40,7 @@ app.post('/api/datasets',(req,res)=>{
 app.delete('/api/datasets/:id',(req,res)=>{const lib=library();lib.datasets=lib.datasets.filter(d=>d.id!==req.params.id);saveLibrary(lib);res.json({ok:true});});
 app.get('/api/runs',(req,res)=>res.json(listRuns()));
 app.post('/api/runs',(req,res)=>res.status(202).json(launch(req.body)));
-app.get('/api/runs/:id',(req,res)=>{const data=detail(req.params.id);res.json({...data,cost_audit:costAudit(data.ledger),analysis:analyze(data.rows,req.query,data.snapshot.settings.repeats)});});
+app.get('/api/runs/:id',(req,res)=>{const data=detail(req.params.id);res.json({...data,cost_audit:costAudit(data.ledger),analysis:analyze(data.rows,req.query,data.snapshot.settings.repeats,data.snapshot.total_cells)});});
 app.post('/api/runs/:id/cancel',(req,res)=>res.json(cancel(req.params.id)));
 app.post('/api/runs/:id/replay',(req,res)=>res.status(202).json(launch(req.body,detail(req.params.id).snapshot)));
 app.patch('/api/runs/:id/rows/:rowId',(req,res)=>{
@@ -52,7 +52,7 @@ app.patch('/api/runs/:id/rows/:rowId',(req,res)=>{
   row.category=req.body.category;atomic(path.join(runDir(req.params.id),'rows.json'),d.rows);res.json(row);
 });
 app.get('/api/runs/:id/export/:format',(req,res)=>{
-  const d=detail(req.params.id),analysis=analyze(d.rows,req.query,d.snapshot.settings.repeats),format=req.params.format;
+  const d=detail(req.params.id),analysis=analyze(d.rows,req.query,d.snapshot.settings.repeats,d.snapshot.total_cells),format=req.params.format;
   const name=`${req.params.id}.${format==='markdown'?'md':format}`;
   res.setHeader('Content-Disposition',`attachment; filename="${name}"`);
   if(format==='csv') return res.type('text/csv').send(csv(d.rows));

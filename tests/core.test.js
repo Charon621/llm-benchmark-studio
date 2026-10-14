@@ -46,3 +46,8 @@ test('live runs are explicitly gated without reading or transmitting secrets',()
   assert.throws(()=>freezeConfig({dataset_id:'test',prompt_ids:['a'],model_ids:['live-qwen']},lib,'run-live'),/未启用/);
   if(old!=null)process.env.STUDIO_ENABLE_LIVE=old;
 });
+test('completed repeat groups cannot hide completely unstarted cells in a partial matrix',()=>{
+  const rows=[0,1].map(repeat_index=>({model:'a',case_id:'first-only',prompt:'direct',repeat_index,success:true,output:'same',latency_ms:10,cost_usd:null}));
+  const partial=analyze(rows,{},2,8).summary[0];assert.equal(partial.stability,null);assert.equal(partial.weighted_score,null);
+  assert.equal(analyze(rows,{},2,2).summary[0].stability,1);
+});
