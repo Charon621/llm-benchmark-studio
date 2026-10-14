@@ -1,0 +1,9 @@
+{
+  "attempts": 0,
+  "cost": 0,
+  "committed_cost": 0,
+  "reserved_cost": 0,
+  "agent_model_calls": 0,
+  "tokenUsage": 0,
+  "attemptsLog": []
+}

@@ -59,10 +59,12 @@ export default class StudioProvider {
             response={output:body.choices[0].message.content,...(usage.total_tokens!=null?{tokenUsage:{total:usage.total_tokens,...(input==null?{}:{prompt:input}),...(output==null?{}:{completion:output})}}:{}),...(cost==null?{}:{cost}),metadata:{execution_mode:'live',model_returned:body.model,system_fingerprint:body.system_fingerprint??null,input_tokens:input,output_tokens:output,cost_usd:cost,finish_reason:body.choices[0].finish_reason}};
           }
           response.metadata={...response.metadata,latency_ms:performance.now()-started,attempts:attempt+1};
-          ledger.cost+=response.metadata.cost_usd||0;
-          if (estimate!=null) {ledger.reserved_cost-=estimate;ledger.committed_cost+=response.metadata.cost_usd??estimate;}
+          const successfulCost=response.metadata.cost_usd;
+          ledger.cost+=successfulCost||0;
+          if (estimate!=null) {ledger.reserved_cost-=estimate;ledger.committed_cost+=successfulCost??estimate;}
           ledger.tokenUsage+=(response.metadata.input_tokens||0)+(response.metadata.output_tokens||0);
           log.status='complete';log.cost_usd=response.metadata.cost_usd;log.latency_ms=response.metadata.latency_ms;log.input_tokens=response.metadata.input_tokens;log.output_tokens=response.metadata.output_tokens;
+          if(attempt>0){response.metadata={...response.metadata,successful_attempt_cost_usd:successfulCost,successful_attempt_input_tokens:response.metadata.input_tokens,successful_attempt_output_tokens:response.metadata.output_tokens,cost_usd:null,input_tokens:null,output_tokens:null,uncertain_attempts:attempt};}
           return response;
         } catch(error) {
           log.status='error';log.error=String(error.message).replace(/Bearer\s+\S+/g,'Bearer [REDACTED]');last=error;

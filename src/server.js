@@ -6,7 +6,7 @@ import { seed } from './seeds.js';
 import { models } from './models.js';
 import { importDataset } from './datasets.js';
 import { launch, cancel, detail, recover } from './runner.js';
-import { analyze, csv, markdown } from './analysis.js';
+import { analyze, csv, markdown, costAudit } from './analysis.js';
 
 seed();recover();
 export const app=express();
@@ -40,7 +40,7 @@ app.post('/api/datasets',(req,res)=>{
 app.delete('/api/datasets/:id',(req,res)=>{const lib=library();lib.datasets=lib.datasets.filter(d=>d.id!==req.params.id);saveLibrary(lib);res.json({ok:true});});
 app.get('/api/runs',(req,res)=>res.json(listRuns()));
 app.post('/api/runs',(req,res)=>res.status(202).json(launch(req.body)));
-app.get('/api/runs/:id',(req,res)=>{const data=detail(req.params.id);res.json({...data,analysis:analyze(data.rows,req.query,data.snapshot.settings.repeats)});});
+app.get('/api/runs/:id',(req,res)=>{const data=detail(req.params.id);res.json({...data,cost_audit:costAudit(data.ledger),analysis:analyze(data.rows,req.query,data.snapshot.settings.repeats)});});
 app.post('/api/runs/:id/cancel',(req,res)=>res.json(cancel(req.params.id)));
 app.post('/api/runs/:id/replay',(req,res)=>res.status(202).json(launch(req.body,detail(req.params.id).snapshot)));
 app.patch('/api/runs/:id/rows/:rowId',(req,res)=>{
@@ -56,8 +56,8 @@ app.get('/api/runs/:id/export/:format',(req,res)=>{
   const name=`${req.params.id}.${format==='markdown'?'md':format}`;
   res.setHeader('Content-Disposition',`attachment; filename="${name}"`);
   if(format==='csv') return res.type('text/csv').send(csv(d.rows));
-  if(format==='markdown') return res.type('text/markdown').send(markdown(d.snapshot,d.rows,analysis));
-  if(format==='json') return res.json({...d,analysis});
+  if(format==='markdown') return res.type('text/markdown').send(markdown(d.snapshot,d.rows,analysis,d.ledger));
+  if(format==='json') return res.json({...d,analysis,cost_audit:costAudit(d.ledger)});
   if(format==='config') return res.type('application/json').send(read(path.join(runDir(req.params.id),'promptfooconfig.json')));
   if(format==='raw') return res.json(read(path.join(runDir(req.params.id),'raw-results.json'),{warning:'尚无最终原始结果；完成单元在 JSON 导出内'}));
   throw new Error('不支持的导出格式');

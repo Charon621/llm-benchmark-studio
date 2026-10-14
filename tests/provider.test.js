@@ -7,7 +7,7 @@ test('local HTTP fixture tests real transport, retries and null-aware accounting
   resetLedger();let calls=0;
   const server=http.createServer((req,res)=>{calls++;if(calls===1){res.writeHead(429);res.end('reflected-secret-must-not-log');return;}res.setHeader('Content-Type','application/json');res.end(JSON.stringify({model:'LOCAL_HTTP_FIXTURE',system_fingerprint:'local-test',choices:[{message:{content:'fixture answer'}}],usage:{prompt_tokens:4,completion_tokens:2,total_tokens:6}}));});
   await new Promise(r=>server.listen(0,'127.0.0.1',r));process.env.STUDIO_TEST_KEY='local-test-placeholder';
-  try {const p=new StudioProvider({config:config(`http://127.0.0.1:${server.address().port}`)});const r=await p.callApi('hello',{vars:{case_id:'x'}});assert.equal(r.output,'fixture answer');assert.equal(r.metadata.input_tokens,4);assert.equal(r.metadata.cost_usd,null);assert.equal(r.metadata.model_returned,'LOCAL_HTTP_FIXTURE');assert.equal(getLedger().attempts,2);assert.ok(!JSON.stringify(getLedger()).includes('reflected-secret'));}
+  try {const p=new StudioProvider({config:config(`http://127.0.0.1:${server.address().port}`)});const r=await p.callApi('hello',{vars:{case_id:'x'}});assert.equal(r.output,'fixture answer');assert.equal(r.metadata.input_tokens,null);assert.equal(r.metadata.successful_attempt_input_tokens,4);assert.equal(r.metadata.cost_usd,null);assert.equal(r.metadata.uncertain_attempts,1);assert.equal(r.metadata.model_returned,'LOCAL_HTTP_FIXTURE');assert.equal(getLedger().attempts,2);assert.ok(!JSON.stringify(getLedger()).includes('reflected-secret'));}
   finally{delete process.env.STUDIO_TEST_KEY;await new Promise(r=>server.close(r));}
 });
 test('all retries consume call budget and terminal HTTP 400 does not retry',async()=>{

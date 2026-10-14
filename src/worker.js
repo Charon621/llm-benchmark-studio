@@ -2,6 +2,9 @@ process.env.PROMPTFOO_DISABLE_TELEMETRY='1';
 process.env.PROMPTFOO_DISABLE_UPDATE='1';
 process.env.PROMPTFOO_DISABLE_SHARING='1';
 process.env.PROMPTFOO_CACHE_ENABLED='false';
+// 父服务被关闭时停止外部请求，防止孤儿进程在恢复后继续写旧实验。
+let executionFinished=false;
+process.on('disconnect',()=>{if(!executionFinished)process.exit(2);});
 import fs from 'node:fs';
 import path from 'node:path';
 import { atomic, read } from './storage.js';
@@ -27,9 +30,11 @@ try {
   const result=analyze(rows,{quality:50,speed:20,cost:0,stability:30},snapshot.settings.repeats);
   atomic(path.join(dir,'report.json'),{snapshot,analysis:result,rows});
   fs.writeFileSync(path.join(dir,'results.csv'),csv(rows),'utf8');
-  fs.writeFileSync(path.join(dir,'report.md'),markdown(snapshot,rows,result),'utf8');
-  process.send?.({type:'complete',completed:rows.length,engine_id:record.id});
+  fs.writeFileSync(path.join(dir,'report.md'),markdown(snapshot,rows,result,read(path.join(dir,'ledger.json'))),'utf8');
+  executionFinished=true;
+  process.send?.({type:'complete',completed:rows.length,engine_id:record.id},()=>process.disconnect?.());
 } catch(error) {
-  process.send?.({type:'failed',error:error.stack||error.message});
+  executionFinished=true;
+  process.send?.({type:'failed',error:error.stack||error.message},()=>process.disconnect?.());
   process.exitCode=1;
 }

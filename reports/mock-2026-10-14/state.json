@@ -1,0 +1,14 @@
+{
+  "id": "run-1791940064419-b51994",
+  "name": "已运行的Mock流水线验收（非真实模型实验）",
+  "created_at": "2026-10-14T01:07:44.420Z",
+  "status": "complete",
+  "execution_mode": "mock",
+  "total": 144,
+  "completed": 144,
+  "dataset_hash": "56d4ff70a96670e7a27b80e4006b6bc746d9a32601808d9eca6e5306279ea3bd",
+  "snapshot_hash": "e16bc23f90e6cce1105f03c4ce010af240888df9f6bd604b515dc5f046be2efb",
+  "engine_id": "eval-05t-2026-10-14T01:07:45",
+  "error": null,
+  "finished_at": "2026-10-14T01:07:47.734Z"
+}
