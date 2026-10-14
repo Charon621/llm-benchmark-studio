@@ -1,0 +1,3 @@
+id,question,reference,facts,difficulty,expect_json,source_urls
+csv-01,"HTTP 404 和 500 的区别？","404 是目标资源未找到；500 是服务器意外错误。","404|500",simple,false,https://www.rfc-editor.org/rfc/rfc9110.html
+csv-02,"Python tuple 是可变序列吗？","tuple 是不可变序列。","tuple|不可变",simple,false,https://docs.python.org/3/library/stdtypes.html

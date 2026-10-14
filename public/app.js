@@ -1,0 +1,78 @@
+const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pct=n=>n==null?'未知':`${(n*100).toFixed(1)}%`;
+const num=n=>n==null?'未知':Number(n).toLocaleString('zh-CN',{maximumFractionDigits:2});
+let lib,current=null,currentId='',reviewId='',timer,history=[],weights={quality:50,speed:20,cost:0,stability:30};
+async function api(url,options={}){const r=await fetch(url,{...options,headers:{'Content-Type':'application/json',...options.headers}});const data=await r.json();if(!r.ok)throw new Error(data.error||'请求失败');return data;}
+function toast(text){$('#toast').textContent=text;$('#toast').style.display='block';clearTimeout(timer);timer=setTimeout(()=>$('#toast').style.display='none',6500);}
+function guard(fn){return async event=>{event?.preventDefault();try{await fn(event);}catch(e){toast(e.message);}};}
+function switchView(name){$$('.view').forEach(x=>x.hidden=x.id!==`view-${name}`);$$('.nav').forEach(x=>x.classList.toggle('active',x.dataset.view===name));$('#breadcrumb').textContent={experiments:'实验与分析',prompts:'提示词策略',datasets:'测试数据集',guide:'方法与接入'}[name];window.scrollTo(0,0);}
+$$('.nav').forEach(b=>b.onclick=()=>switchView(b.dataset.view));
+async function loadLibrary(){lib=await api('/api/library');renderLibrary();}
+function renderLibrary(){
+  $('#prompt-count').textContent=lib.prompts.length;
+  $('#live-status').textContent=lib.live_enabled?'LIVE 已启用 · 密钥仅本机':'MOCK READY · LIVE 关闭';
+  $('#live-status').classList.toggle('live',lib.live_enabled);
+  $('#run-dataset').innerHTML=lib.datasets.map(d=>`<option value="${esc(d.id)}">${esc(d.name)} · ${d.cases.length}题 / v${d.version}</option>`).join('');
+  $('#model-choices').innerHTML=lib.models.map(m=>`<label class="check choice"><input type="checkbox" name="model_ids" value="${esc(m.id)}" ${m.kind==='mock'?'checked':''}><span>${esc(m.label)}</span><small>${m.kind==='agentlab'?'HTTP 8811':m.mode==='mock'?'MOCK':m.ready?'LIVE KEY 就绪':'LIVE KEY 未配置'}</small></label>`).join('');
+  $('#prompt-choices').innerHTML=lib.prompts.map((p,i)=>`<label class="check choice"><input type="checkbox" name="prompt_ids" value="${esc(p.id)}" ${i<3?'checked':''}><span>${esc(p.name)}</span><small>VERSION ${p.version}</small></label>`).join('');
+  $('#model-settings').innerHTML=lib.models.filter(m=>m.kind==='chat').map(m=>`<details><summary>${esc(m.label)} · 环境变量 ${esc(m.key_env)}</summary><div class="form-grid"><label>模型版本<input name="${m.id}_model" value="${esc(m.model)}"></label><label>兼容 API Base URL<input name="${m.id}_base_url" value="${esc(m.base_url)}"></label><label>输入 USD / 百万 Token<input name="${m.id}_input_price_per_million" type="number" min="0" step="0.01" placeholder="未知留空"></label><label>输出 USD / 百万 Token<input name="${m.id}_output_price_per_million" type="number" min="0" step="0.01" placeholder="未知留空"></label></div></details>`).join('');
+  $('#prompt-list').innerHTML=lib.prompts.map(p=>`<article class="prompt-card"><span class="version">${esc(p.id)} · V${p.version}</span><h3>${esc(p.name)}</h3><p>${esc(p.content)}</p><button class="button small" data-edit-prompt="${esc(p.id)}">编辑 / 新版本</button> <button class="button small danger" data-delete-prompt="${esc(p.id)}">删除</button><p class="hint">历史版本 ${p.history?.length||0} · 实验快照保留原内容</p></article>`).join('');
+  $$('[data-edit-prompt]').forEach(b=>b.onclick=()=>{const p=lib.prompts.find(p=>p.id===b.dataset.editPrompt);for(const k of ['id','name','content'])$('#prompt-form').elements[k].value=p[k];$('#prompt-editor-title').textContent=`编辑 ${p.name} · 保存为 v${p.version+1}`;$('#prompt-form').scrollIntoView({behavior:'smooth'});});
+  $$('[data-delete-prompt]').forEach(b=>b.onclick=guard(async()=>{await api(`/api/prompts/${b.dataset.deletePrompt}`,{method:'DELETE'});await loadLibrary();toast('策略已删除，既有实验快照保留。');}));
+  $('#dataset-list').innerHTML=lib.datasets.map(d=>`<article class="prompt-card"><span class="version">DATASET V${d.version} · ${d.cases.length} CASES</span><h3>${esc(d.name)}</h3><p>${esc(d.cases.map(c=>`${c.id} · ${c.difficulty}`).join(' / '))}</p><p class="mono">SHA256 ${d.hash.slice(0,18)}…</p><button class="button small" data-preview-dataset="${esc(d.id)}">查看题目与事实规则</button> <button class="button small danger" data-delete-dataset="${esc(d.id)}">删除</button></article>`).join('');
+  $$('[data-preview-dataset]').forEach(b=>b.onclick=()=>{const d=lib.datasets.find(d=>d.id===b.dataset.previewDataset);$('#case-detail').innerHTML=`<h3>${esc(d.name)}</h3>${d.cases.map(c=>`<div class="detail-block"><h3>${esc(c.id)} / ${esc(c.difficulty)}</h3><p>${esc(c.question)}</p><p><b>参考：</b>${esc(c.reference)}</p><p><b>事实词：</b>${esc(c.facts.join('、'))}</p>${c.source_urls.map(u=>`<a target="_blank" rel="noreferrer" href="${esc(u)}">${esc(u)}</a><br>`).join('')}</div>`).join('')}`;$('#review-form').hidden=true;$('#case-dialog').showModal();});
+  $$('[data-delete-dataset]').forEach(b=>b.onclick=guard(async()=>{await api(`/api/datasets/${b.dataset.deleteDataset}`,{method:'DELETE'});await loadLibrary();toast('数据集已删除，既有实验数据快照保留。');}));
+  matrix();
+}
+function matrix(){if(!lib)return;const m=$$('input[name="model_ids"]:checked').length,p=$$('input[name="prompt_ids"]:checked').length,c=lib.datasets.find(d=>d.id===$('#run-dataset').value)?.cases.length||0,r=Number($('#run-form').elements.repeats.value)||1;$('#matrix-preview').textContent=`${m} 模型 × ${p} 策略 × ${c} 样本 × ${r} 次 = ${m*p*c*r} 单元`;} 
+$('#run-form').oninput=matrix;
+$('#toggle-config').onclick=()=>{$('#config-panel').hidden=!$('#config-panel').hidden;if(!$('#config-panel').hidden)$('#config-panel').scrollIntoView({behavior:'smooth'});};
+$('#agent-preset').onclick=()=>{$$('input[name="model_ids"]').forEach(x=>x.checked=x.value.startsWith('agentlab-'));$('#run-form').elements.name.value='AgentLab 单 Agent / 多 Agent 对照';$('#run-form').elements.temperature.value=0;matrix();toast('已选择 AgentLab 两种架构。请先确认 8811 服务已启动；同模型与搜索预算在高级配置中冻结。');};
+$('#run-form').onsubmit=guard(async()=>{
+  const f=new FormData($('#run-form')),body=Object.fromEntries(f);body.model_ids=f.getAll('model_ids');body.prompt_ids=f.getAll('prompt_ids');body.confirm_live=f.has('confirm_live');body.judge_enabled=f.has('judge_enabled');body.model_overrides={};
+  for(const m of lib.models.filter(m=>m.kind==='chat'))body.model_overrides[m.id]=Object.fromEntries(['model','base_url','input_price_per_million','output_price_per_million'].map(k=>[k,f.get(`${m.id}_${k}`)]));
+  body.model_overrides['judge-qwen']={input_price_per_million:f.get('judge_input_price')||null,output_price_per_million:f.get('judge_output_price')||null};
+  const state=await api('/api/runs',{method:'POST',body:JSON.stringify(body)});currentId=state.id;$('#config-panel').hidden=true;await loadHistory();await loadRun();toast('Promptfoo 实验已启动；缓存关闭，正在逐单元保存结果。');
+});
+async function loadHistory(){history=await api('/api/runs');$('#history-select').innerHTML=history.length?history.map(r=>`<option value="${r.id}">${r.execution_mode.toUpperCase()} · ${esc(r.name)} · ${r.completed}/${r.total} · ${r.status}</option>`).join(''):'<option value="">暂无实验</option>';if(!currentId&&history.length)currentId=history[0].id;if(currentId)$('#history-select').value=currentId;}
+$('#history-select').onchange=guard(async()=>{currentId=$('#history-select').value;await loadRun();});
+$('#refresh').onclick=guard(async()=>{await loadHistory();await loadRun();});
+const query=()=>new URLSearchParams(weights).toString();
+async function loadRun(){if(!currentId)return;current=await api(`/api/runs/${currentId}?${query()}`);renderRun();}
+function renderRun(){
+  const {state,snapshot,rows,analysis}=current;
+  $('#empty-results').hidden=true;$('#results').hidden=false;
+  $('#experiment-subtitle').textContent=`${state.id} · ${new Date(state.created_at).toLocaleString('zh-CN')}`;
+  $('#run-mode').textContent=state.execution_mode.toUpperCase();$('#run-mode').classList.toggle('live',state.execution_mode==='live');$('#run-name').textContent=state.name;
+  const status={running:'正在运行',complete:'已完成',failed:'失败',invalid:'开发无效记录（禁止用于结论）',cancelled:'已取消',interrupted:'服务重启中断',timeout:'总超时'};
+  $('#run-state').textContent=`${status[state.status]||state.status} · ${state.completed} / ${state.total} 单元 · Promptfoo ${snapshot.promptfoo_version}`;
+  $('#run-progress').value=state.completed;$('#run-progress').max=state.total;$('#run-error').textContent=state.error||'';
+  $('#cancel-run').hidden=state.status!=='running';$('#replay-run').disabled=state.status==='running';
+  for(const format of ['json','csv','markdown','config'])$(`#export-${format}`).href=`/api/runs/${state.id}/export/${format}?${query()}`;
+  const failed=rows.filter(r=>!r.success).length;
+  $('#metric-cards').innerHTML=[['已完成单元',`${rows.length}<small> / ${state.total}</small>`,'缓存关闭 · 完成即落盘'],['任务通过率',pct(rows.length?(rows.length-failed)/rows.length:null),'预定义断言全部通过'],['需复核案例',failed,'原始输出与依据完整保留'],['实验模式',state.execution_mode.toUpperCase(),state.execution_mode==='mock'?'演示夹具 · 非真实模型结论':'真实请求 · 以服务端 usage 为准']].map(([label,value,caption])=>`<div class="metric"><div class="label">${label}</div><div class="value">${value}</div><div class="caption">${caption}</div></div>`).join('');
+  $('#model-chart').innerHTML=analysis.summary.map(s=>`<div class="bar-row"><span>${esc(s.model)}</span><div class="bar-track"><div class="bar-fill" style="width:${(s.pass_rate||0)*100}%"></div></div><strong>${pct(s.pass_rate)}</strong></div>`).join('')||'<p class="hint">等待第一个完成单元…</p>';
+  $('#sensitivity-chart').innerHTML=analysis.sensitivity.map(s=>`<div class="sensitivity-row"><span>${esc(s.model)}<br>${esc(s.prompt)}</span><div class="bar-track"><div class="bar-fill" style="width:${(s.pass_rate||0)*100}%"></div></div><strong>${pct(s.pass_rate)}</strong></div>`).join('');
+  $('#ranking-note').textContent=analysis.ranking_note;
+  $('#ranking-body').innerHTML=analysis.summary.map(s=>`<tr><td><b>${esc(s.model)}</b><small>${s.count} 单元 · 指标覆盖 ${pct(s.weight_coverage)}</small></td><td>${s.weighted_score==null?'不参与':(100*s.weighted_score).toFixed(1)}<small>${esc(s.ranking_missing.join('、'))}</small></td><td>${pct(s.pass_rate)}</td><td>${pct(s.reference_score)}</td><td>${pct(s.json_rate)}</td><td>${num(s.avg_latency_ms)} ms</td><td>${num(s.total_tokens)}<small>${s.known_token_cells}/${s.count} 已知</small></td><td>${num(s.total_cost_usd)}<small>${s.known_cost_cells}/${s.count} 已知</small></td><td>${pct(s.stability)}</td></tr>`).join('');
+  renderCases();
+  $('#snapshot-preview').textContent=JSON.stringify({snapshot,ledger:current.ledger},null,2);
+}
+function renderCases(){if(!current)return;const filter=$('#case-search').value.toLowerCase();const rows=current.rows.filter(r=>(!$('#fail-only').checked||!r.success)&&[r.case_id,r.model,r.prompt,r.output].join(' ').toLowerCase().includes(filter));$('#cases-body').innerHTML=rows.slice(0,250).map(r=>`<tr><td><b>${esc(r.case_id)}</b><small>${esc(r.difficulty)}</small></td><td>${esc(r.model)}<small>${esc(r.prompt)}</small></td><td>${r.repeat_index+1}</td><td><span class="${r.success?'pass':'fail'}">${r.success?'通过':'未通过'}</span></td><td>${esc(r.category||'—')}${r.human_review?'<small>人工已复核</small>':''}</td><td>${num(r.latency_ms)} ms</td><td><button class="button small" data-case="${esc(r.id)}">查看 / 复核</button></td></tr>`).join('');$('#case-count').textContent=`筛选后 ${rows.length} 个单元${rows.length>250?'，界面显示前 250 个，完整数据请导出':''}。`;
+$$('[data-case]').forEach(b=>b.onclick=()=>openCase(b.dataset.case));}
+function openCase(id){const r=current.rows.find(r=>r.id===id);reviewId=id;const c=current.snapshot.dataset.cases.find(c=>c.id===r.case_id);$('#case-detail').innerHTML=`<div class="detail-block"><h3>${esc(r.case_id)} · ${esc(r.model)} · ${esc(r.prompt)}</h3><p>${esc(r.question)}</p></div><div class="detail-block"><h3>原始输出 ${r.error?'· 请求失败':''}</h3><pre>${esc(r.error||r.output)}</pre></div><div class="detail-block"><h3>人工参考答案</h3><p>${esc(r.reference)}</p></div><div class="detail-block"><h3>Promptfoo 断言依据</h3><pre>${esc(JSON.stringify(r.grading,null,2))}</pre></div><div class="detail-block"><h3>来源核验入口</h3>${(r.metadata.sources||[]).map(s=>`<p><a href="${esc(s.url)}" target="_blank" rel="noreferrer">${esc(s.title||s.url)}</a></p>`).join('')}${(c?.source_urls||[]).map(u=>`<a href="${esc(u)}" target="_blank" rel="noreferrer">${esc(u)}</a><br>`).join('')}<p class="hint">参考来源用于人工复核，URL存在不等于支持输出每个论断。</p></div><div class="detail-block"><h3>调用 / 节点信息</h3><pre>${esc(JSON.stringify(r.metadata,null,2))}</pre></div>`;$('#review-form').hidden=false;$('#review-form').elements.category.value=r.human_review?.category||r.category||'通过';$('#review-form').elements.note.value=r.human_review?.note||'';$('#case-dialog').showModal();}
+$('#close-dialog').onclick=()=>$('#case-dialog').close();
+$('#review-form').onsubmit=guard(async()=>{const data=Object.fromEntries(new FormData($('#review-form')));await api(`/api/runs/${currentId}/rows/${reviewId}`,{method:'PATCH',body:JSON.stringify(data)});$('#case-dialog').close();await loadRun();toast('已保存人工分类与复核说明；自动评分保留原值。');});
+$('#fail-only').onchange=renderCases;$('#case-search').oninput=renderCases;
+$('#weights').innerHTML=Object.entries({quality:'任务质量',speed:'响应速度',cost:'调用成本',stability:'输出稳定性'}).map(([k,label])=>`<label>${label}<output id="weight-${k}">${weights[k]}</output><input type="range" min="0" max="100" value="${weights[k]}" data-weight="${k}" aria-label="${label}权重"></label>`).join('');
+let weightTimer;$$('[data-weight]').forEach(i=>i.oninput=()=>{weights[i.dataset.weight]=Number(i.value);$(`#weight-${i.dataset.weight}`).textContent=i.value;clearTimeout(weightTimer);weightTimer=setTimeout(()=>loadRun().catch(e=>toast(e.message)),250);});
+$('#cancel-run').onclick=guard(async()=>{await api(`/api/runs/${currentId}/cancel`,{method:'POST'});await loadRun();toast('已取消，已完成单元保留。');});
+$('#replay-run').onclick=guard(async()=>{const body={confirm_live:$('#run-form').elements.confirm_live.checked};const state=await api(`/api/runs/${currentId}/replay`,{method:'POST',body:JSON.stringify(body)});currentId=state.id;await loadHistory();await loadRun();toast('已创建新的复跑实验，原记录保持不变。');});
+$('#new-prompt').onclick=()=>{$('#prompt-form').reset();$('#prompt-form').elements.id.value='';$('#prompt-editor-title').textContent='新建提示词策略';$('#prompt-form').scrollIntoView({behavior:'smooth'});};
+$('#prompt-form').onsubmit=guard(async()=>{await api('/api/prompts',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData($('#prompt-form'))))});await loadLibrary();$('#prompt-form').reset();$('#prompt-form').elements.id.value='';toast('提示词已保存。既有实验的冻结版本不受影响。');});
+$('#dataset-file').onchange=guard(async()=>{const file=$('#dataset-file').files[0];if(!file)return;if(file.size>2_000_000)throw new Error('文件超过2MB');$('#dataset-form').elements.content.value=await file.text();$('#dataset-form').elements.format.value=file.name.endsWith('.csv')?'csv':'json';if(!$('#dataset-form').elements.name.value)$('#dataset-form').elements.name.value=file.name.replace(/\.(json|csv)$/i,'');});
+$('#dataset-form').onsubmit=guard(async()=>{const data=await api('/api/datasets',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData($('#dataset-form'))))});await loadLibrary();toast(`已校验导入 ${data.cases.length} 条样本，SHA256 ${data.hash.slice(0,12)}…`);});
+await loadLibrary().catch(e=>toast(e.message));await loadHistory().catch(e=>toast(e.message));await loadRun().catch(e=>toast(e.message));
+setInterval(async()=>{if(current?.state.status==='running'){try{await loadRun();if(current.state.status!=='running')await loadHistory();}catch(e){toast(e.message);}}},1800);
