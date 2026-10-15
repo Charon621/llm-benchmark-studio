@@ -1,14 +1,15 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const providers = {kimi:'Kimi / Moonshot',qwen:'Qwen / 千问',deepseek:'DeepSeek',glm:'GLM / 智谱',openai:'OpenAI',anthropic:'Anthropic / Claude',custom:'自定义 API'};
+const providers = {kimi:'Kimi / Moonshot',qwen:'Qwen / 千问',deepseek:'DeepSeek',glm:'GLM / 智谱',xiaomi:'MiMo / 小米',openai:'OpenAI',anthropic:'Anthropic / Claude',custom:'自定义 API'};
 // Editable examples, never an availability check or a fixed model version.
-const modelExamples = {kimi:['moonshot-v1-8k'],qwen:['qwen-plus'],deepseek:['deepseek-chat'],glm:['glm-4-plus'],openai:['gpt-4.1-mini'],anthropic:['claude-sonnet-4-5'],custom:[]};
+const modelExamples = {kimi:['kimi-k3','kimi-k2.7-code','kimi-k2.6'],qwen:['qwen3.8-flash','qwen3.7-plus','qwen3.8-max'],deepseek:['deepseek-chat','deepseek-reasoner'],glm:['glm-5.3','glm-5.3-flash','glm-5.2','glm-4.6'],xiaomi:['mimo-v2.6-pro','mimo-v2.6-flash','mimo-v2.6-pro-ultraspeed','mimo-v2.5'],openai:['gpt-4.1-mini','gpt-4.1','gpt-4o-mini'],anthropic:['claude-sonnet-4-5','claude-opus-4-1','claude-haiku-4-5'],custom:[]};
 const fallbackPresets = [
   {provider:'kimi',protocol:'openai',base_url:'https://api.moonshot.cn/v1'},
   {provider:'qwen',protocol:'openai',base_url:'https://dashscope.aliyuncs.com/compatible-mode/v1'},
   {provider:'deepseek',protocol:'openai',base_url:'https://api.deepseek.com/v1'},
   {provider:'glm',protocol:'openai',base_url:'https://open.bigmodel.cn/api/paas/v4'},
+  {provider:'xiaomi',protocol:'openai',base_url:'https://api.xiaomimimo.com/v1'},
   {provider:'openai',protocol:'openai',base_url:'https://api.openai.com/v1'},
   {provider:'anthropic',protocol:'anthropic',base_url:'https://api.anthropic.com/v1'},
   {provider:'custom',protocol:'openai',base_url:''}
@@ -46,10 +47,11 @@ export async function setupModelManager({api,guard,toast,reloadLibrary}) {
   function edit(id) {
     const model = configs.find(m => m.id === id);if(!model)return;
     form.reset();hideKey();choosePreset(model.provider,false);
-    for(const name of ['id','provider','protocol','model','base_url','temperature','max_tokens','input_price_per_million','output_price_per_million','max_tokens_parameter']) {
+    for(const name of ['id','provider','protocol','model','base_url','temperature','max_tokens','input_price_per_million','output_price_per_million','max_tokens_parameter','max_images','fixed_temperature']) {
       if(el(name) && model[name] != null) el(name).value = model[name];
     }
     el('name').value = model.name || model.label;
+    el('supports_vision').checked=model.capabilities?.vision===true;
     el('supports_tools').checked = model.supports_tools !== false;
     el('send_temperature').value = String(model.send_temperature !== false);
     el('max_tokens_parameter').disabled = model.protocol === 'anthropic';
@@ -66,8 +68,8 @@ export async function setupModelManager({api,guard,toast,reloadLibrary}) {
     $('#managed-model-list').innerHTML = configs.length ? configs.map(model => {
       const result = statuses.get(model.id) || model.connection_status;
       const status = typeof result === 'object' ? result : null;
-      return `<article class="connection-card"><div class="connection-card-head"><span class="version">${esc(providers[model.provider] || model.provider)} / ${model.protocol === 'anthropic'?'MESSAGES':'CHAT'}</span>${model.is_default?'<span class="pill">默认模型</span>':''}</div><h3>${esc(model.name || model.label)}</h3><div class="model-id">${esc(model.model)}</div><p class="endpoint">${esc(model.base_url)}</p><div class="connection-meta"><span class="${model.ready?'pass':'fail'}">${model.ready?'凭证已就绪':'需要填写密钥'}</span><span>配置 v${model.config_version} · ${model.supports_tools === false?'不使用原生工具':'原生工具调用'}</span></div><p class="connection-result ${status?.ok?'pass-text':status?.ok===false?'error':''}" role="status">${status?`${esc(categories[status.category] || (status.ok?'连接成功':'连接失败'))} · ${esc(status.message || '')}${status.latency_ms != null?` / ${Math.round(status.latency_ms)} ms`:''}`:model.last_test?esc(model.last_test.message || '已有连接记录'):'尚未测试此配置'}</p><div class="connection-actions"><button type="button" class="button small" data-model-edit="${esc(model.id)}">编辑</button><button type="button" class="button small" data-model-test="${esc(model.id)}" ${model.ready?'':'disabled'}>测试连接 · 真实 API</button><button type="button" class="button small" data-model-default="${esc(model.id)}" ${model.is_default?'disabled':''}>设为默认</button><button type="button" class="button small danger" data-model-clear="${esc(model.id)}" ${model.ready?'':'disabled'}>删除凭证</button><button type="button" class="button small danger" data-model-delete="${esc(model.id)}">删除配置</button></div></article>`;
-    }).join('') : '<div class="empty panel connection-empty"><span class="empty-icon">◈</span><h3>从一个可用模型开始</h3><p>选择服务商、填写 Model ID 和密钥。<br>同一家服务商的不同模型版本可以分别保存和比较。</p></div>';
+      return `<article class="connection-card"><div class="connection-card-head"><span class="version">${esc(providers[model.provider] || model.provider)} / ${model.protocol === 'anthropic'?'MESSAGES':'CHAT'}</span>${model.is_default?'<span class="pill complete">默认模型</span>':''}</div><h3>${esc(model.name || model.label)}</h3><div class="model-id">${esc(model.model)}</div><p class="endpoint">${esc(model.base_url)}</p><div class="connection-meta"><span class="${model.ready?'pass':'fail'}">${model.ready?'凭证已就绪':'需要填写密钥'}</span><span>配置 v${model.config_version} · ${model.supports_tools === false?'不使用原生工具':'原生工具调用'}</span></div><p class="connection-result ${status?.ok?'pass-text':status?.ok===false?'error':''}" role="status">${status?`${esc(categories[status.category] || (status.ok?'连接成功':'连接失败'))} · ${esc(status.message || '')}${status.latency_ms != null?` / ${Math.round(status.latency_ms)} ms`:''}`:model.last_test?esc(model.last_test.message || '已有连接记录'):'尚未测试此配置'}</p><div class="connection-actions"><button type="button" class="btn btn-secondary btn-sm" data-model-edit="${esc(model.id)}">编辑</button><button type="button" class="btn btn-secondary btn-sm" data-model-test="${esc(model.id)}" ${model.ready?'':'disabled'}>测试连接 · 真实 API</button><button type="button" class="btn btn-secondary btn-sm" data-model-default="${esc(model.id)}" ${model.is_default?'disabled':''}>设为默认</button><button type="button" class="btn btn-danger btn-sm" data-model-clear="${esc(model.id)}" ${model.ready?'':'disabled'}>删除凭证</button><button type="button" class="btn btn-danger btn-sm" data-model-delete="${esc(model.id)}">删除配置</button></div></article>`;
+    }).join('') : `<div class="empty panel connection-empty"><span class="empty-icon"><svg viewBox="0 0 48 48" fill="none"><rect x="10" y="10" width="28" height="28" rx="6" stroke="currentColor" stroke-width="2"/><path d="M17 24h14M24 17v14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><h3>从一个可用模型开始</h3><p>选择服务商、填写 Model ID 和密钥。<br>同一家服务商的不同模型版本可以分别保存和比较。</p></div>`;
     $$('[data-model-edit]').forEach(button => button.onclick = () => edit(button.dataset.modelEdit));
     $$('[data-model-test]').forEach(button => button.onclick = guard(async() => {
       const id = button.dataset.modelTest;button.disabled = true;button.textContent = '正在连接…';
@@ -89,7 +91,7 @@ export async function setupModelManager({api,guard,toast,reloadLibrary}) {
     }));
   }
   function renderConnections() {
-    $('#integration-list').innerHTML = connections.map(connection => `<article class="integration-card"><div><span class="version">AGENTLAB / SAME MODEL</span><h3>${esc(connection.model_config?.name || connection.model_config?.model || connection.model_config_id)}</h3><p>${esc(connection.url)} · ${esc(connection.model_config?.model || '')}</p><p class="hint">Single / Multi 使用同一模型配置和实验预算。</p></div><button class="button small danger" type="button" data-integration-delete="${esc(connection.id)}">断开连接</button></article>`).join('');
+    $('#integration-list').innerHTML = connections.map(connection => `<article class="integration-card"><div><span class="version">AGENTLAB / SAME MODEL</span><h3>${esc(connection.model_config?.name || connection.model_config?.model || connection.model_config_id)}</h3><p class="hint">${esc(connection.url)} · ${esc(connection.model_config?.model || '')}</p><p class="hint">Single / Multi 使用同一模型配置和实验预算。</p></div><button class="btn btn-danger btn-sm" type="button" data-integration-delete="${esc(connection.id)}">断开连接</button></article>`).join('');
     $$('[data-integration-delete]').forEach(button => button.onclick = guard(async() => {await api(`/api/integration/${encodeURIComponent(button.dataset.integrationDelete)}`,{method:'DELETE'});await refresh();await reloadLibrary();toast('已断开授权连接。');}));
   }
   async function refresh() {
@@ -113,7 +115,7 @@ export async function setupModelManager({api,guard,toast,reloadLibrary}) {
   form.onsubmit = guard(async() => {
     const submit = form.querySelector('[type="submit"]');submit.disabled = true;
     const data = Object.fromEntries(new FormData(form));const id = data.id;delete data.id;
-    data.supports_tools = el('supports_tools').checked;data.send_temperature = el('send_temperature').value === 'true';
+    data.capabilities={text:true,vision:el('supports_vision').checked};data.max_images=Number(el('max_images').value);data.fixed_temperature=el('fixed_temperature').value===''?null:Number(el('fixed_temperature').value);delete data.supports_vision;data.supports_tools = el('supports_tools').checked;data.send_temperature = el('send_temperature').value === 'true';
     for(const name of ['temperature','max_tokens','input_price_per_million','output_price_per_million'])data[name] = data[name] === '' ? null : Number(data[name]);
     if(!data.api_key)delete data.api_key;
     try {await api(id?`/api/models/${encodeURIComponent(id)}`:'/api/models',{method:id?'PATCH':'POST',body:JSON.stringify(data)});if(id)statuses.delete(id);resetEditor();await refresh();await reloadLibrary();toast('模型配置已保存，可以测试连接或加入实验。');}
@@ -125,6 +127,6 @@ export async function setupModelManager({api,guard,toast,reloadLibrary}) {
     finally {integrationForm.elements.token.value = '';submit.disabled = false;}
   });
   document.addEventListener('visibilitychange',() => {if(document.hidden)hideKey();});
-  $$('[data-view]').forEach(button => button.addEventListener('click',() => {hideKey();if(button.dataset.view === 'models')refresh().catch(error => toast(error.message));}));
+  $$('.nav-item[data-view]').forEach(button => button.addEventListener('click',() => {hideKey();if(button.dataset.view === 'models')refresh().catch(error => toast(error.message));}));
   resetEditor();await refresh();
 }

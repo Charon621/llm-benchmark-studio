@@ -1,10 +1,30 @@
 {
   "name": "llm-benchmark-studio",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "基于 Promptfoo 的可复现本地模型评测工作台",
-  "engines": { "node": ">=22.22.0" },
-  "scripts": { "start": "node src/server.js", "test": "node --test tests/*.test.js", "demo": "node scripts/demo.js", "replay": "node scripts/replay.js" },
-  "dependencies": { "csv-parse": "7.0.3", "express": "5.3.0", "promptfoo": "0.124.1" }
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --import ./tests/setup.js --test tests/*.test.js",
+    "test:unit": "node --import ./tests/setup.js --test tests/api.test.js tests/core.test.js tests/model-api.test.js tests/native-protocol.test.js tests/promptfoo.test.js tests/provider.test.js tests/transport.test.js tests/vision-api.test.js tests/vision-datasets.test.js tests/vision-metrics.test.js tests/vision-provider.test.js tests/worker-secrets.test.js tests/repair-contracts.test.js",
+    "test:browser": "node --import ./tests/setup.js --test tests/browser*.test.js",
+    "test:all": "node --import ./tests/setup.js --test tests/*.test.js",
+    "demo": "node scripts/demo.js",
+    "replay": "node scripts/replay.js"
+  },
+  "dependencies": {
+    "csv-parse": "7.0.3",
+    "express": "5.3.0",
+    "multer": "2.0.2",
+    "promptfoo": "0.124.1",
+    "sharp": "0.35.5",
+    "fflate": "0.8.3"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
 }

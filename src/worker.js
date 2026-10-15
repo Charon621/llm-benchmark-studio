@@ -8,7 +8,7 @@ process.on('disconnect',()=>{if(!executionFinished)process.exit(2);});
 import fs from 'node:fs';
 import path from 'node:path';
 import { atomic, read } from './storage.js';
-import { normalize, analyze, csv, markdown } from './analysis.js';
+import { normalize, dispatchAnalyze, csv, markdown } from './analysis.js';
 import {installWorkerCredentials} from './credentials.js';
 
 const dir=process.argv[2];
@@ -30,9 +30,9 @@ try {
   if (!rows.length && raw.results?.length) rows.push(...raw.results.map(normalize));
   atomic(path.join(dir,'raw-results.json'),raw);
   atomic(path.join(dir,'rows.json'),rows);
-  const result=analyze(rows,{quality:50,speed:20,cost:0,stability:30},snapshot.settings.repeats,snapshot.total_cells);
-  atomic(path.join(dir,'report.json'),{snapshot,analysis:result,rows});
-  fs.writeFileSync(path.join(dir,'results.csv'),csv(rows),'utf8');
+  const result=dispatchAnalyze(rows,snapshot);
+  atomic(path.join(dir,'report.json'),{snapshot,analysis:result,rows:result.rows||rows});
+  fs.writeFileSync(path.join(dir,'results.csv'),csv(rows,snapshot),'utf8');
   fs.writeFileSync(path.join(dir,'report.md'),markdown(snapshot,rows,result,read(path.join(dir,'ledger.json'))),'utf8');
   executionFinished=true;
   process.send?.({type:'complete',completed:rows.length,engine_id:record.id},()=>process.disconnect?.());
@@ -41,3 +41,4 @@ try {
   process.send?.({type:'failed',error:'Promptfoo 执行失败；冻结配置与已完成结果已保留。请核对配置和模型能力。'},()=>process.disconnect?.());
   process.exitCode=1;
 }
+import './test-network-guard.js';

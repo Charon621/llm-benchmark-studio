@@ -4,13 +4,14 @@ import {DATA,read,atomic,newId} from './storage.js';
 import {putCredential,getCredential,deleteCredential} from './credentials.js';
 import {endpoint,agentEndpoint,requestJSON,callModel,redactValue} from './transport.js';
 export const presets=[
-  {provider:'kimi',protocol:'openai',base_url:'https://api.moonshot.cn/v1',model:'',key_env:'KIMI_API_KEY',env_prefix:'KIMI'},
-  {provider:'qwen',protocol:'openai',base_url:'https://dashscope.aliyuncs.com/compatible-mode/v1',model:'',key_env:'QWEN_API_KEY',env_prefix:'QWEN'},
-  {provider:'deepseek',protocol:'openai',base_url:'https://api.deepseek.com/v1',model:'',key_env:'DEEPSEEK_API_KEY',env_prefix:'DEEPSEEK'},
-  {provider:'glm',protocol:'openai',base_url:'https://open.bigmodel.cn/api/paas/v4',model:'',key_env:'GLM_API_KEY',env_prefix:'GLM'},
-  {provider:'openai',protocol:'openai',base_url:'https://api.openai.com/v1',model:'',key_env:'OPENAI_API_KEY',env_prefix:'OPENAI'},
-  {provider:'anthropic',protocol:'anthropic',base_url:'https://api.anthropic.com/v1',model:'',key_env:'ANTHROPIC_API_KEY',env_prefix:'ANTHROPIC'},
-  {provider:'custom',protocol:'openai',base_url:'',model:'',key_env:'CUSTOM_API_KEY',env_prefix:'CUSTOM'}
+  {provider:'kimi',protocol:'openai',base_url:'https://api.moonshot.cn/v1',model:'',key_env:'KIMI_API_KEY',env_prefix:'KIMI',supports_vision:true},
+  {provider:'qwen',protocol:'openai',base_url:'https://dashscope.aliyuncs.com/compatible-mode/v1',model:'',key_env:'QWEN_API_KEY',env_prefix:'QWEN',supports_vision:true},
+  {provider:'deepseek',protocol:'openai',base_url:'https://api.deepseek.com/v1',model:'',key_env:'DEEPSEEK_API_KEY',env_prefix:'DEEPSEEK',supports_vision:false},
+  {provider:'glm',protocol:'openai',base_url:'https://open.bigmodel.cn/api/paas/v4',model:'',key_env:'GLM_API_KEY',env_prefix:'GLM',supports_vision:true},
+  {provider:'xiaomi',protocol:'openai',base_url:'https://api.xiaomimimo.com/v1',model:'',key_env:'XIAOMI_API_KEY',env_prefix:'XIAOMI',supports_vision:false},
+  {provider:'openai',protocol:'openai',base_url:'https://api.openai.com/v1',model:'',key_env:'OPENAI_API_KEY',env_prefix:'OPENAI',supports_vision:true},
+  {provider:'anthropic',protocol:'anthropic',base_url:'https://api.anthropic.com/v1',model:'',key_env:'ANTHROPIC_API_KEY',env_prefix:'ANTHROPIC',supports_vision:true},
+  {provider:'custom',protocol:'openai',base_url:'',model:'',key_env:'CUSTOM_API_KEY',env_prefix:'CUSTOM',supports_vision:false}
 ];
 const file=()=>path.join(DATA,'model-definitions.json');
 const all=()=>read(file(),[]);
@@ -21,9 +22,11 @@ function definition(body,old={}) {
   const provider=body.provider||old.provider||'custom',preset=presets.find(p=>p.provider===provider);if(!preset)throw new Error('模型供应商无效');
   const protocol=body.protocol||old.protocol||preset.protocol;if(!['openai','anthropic'].includes(protocol))throw new Error('模型协议无效');
   const model=String(body.model??old.model??'').trim();if(!model||model.length>160)throw new Error('请填写账号可用的模型 ID（最多160字符）');
+  if(body.capabilities?.vision!=null&&typeof body.capabilities.vision!=='boolean')throw new Error('vision 必须为布尔值');
+  if(body.max_images!=null&&(!Number.isInteger(body.max_images)||body.max_images<0||body.max_images>5))throw new Error('max_images 必须为 0—5 整数');
   const name=String(body.name??body.label??old.name??model).trim().slice(0,100);
   let param=body.max_tokens_parameter||old.max_tokens_parameter||(provider==='openai'?'max_completion_tokens':'max_tokens');if(param==='auto')param=provider==='openai'?'max_completion_tokens':'max_tokens';if(!['max_tokens','max_completion_tokens'].includes(param))throw new Error('输出 Token 参数无效');
-  return {id:old.id||newId('model'),name,label:name,provider,protocol,model,base_url:endpoint(body.base_url||old.base_url||preset.base_url),config_version:(old.config_version||0)+1,credential_id:old.credential_id||credentialId(),supports_tools:body.supports_tools==null?Boolean(old.supports_tools):body.supports_tools===true,send_temperature:body.send_temperature==null?old.send_temperature!==false:body.send_temperature===true,max_tokens_parameter:param,temperature:numeric(body.temperature,old.temperature??0,0,protocol==='anthropic'?1:2),max_tokens:Math.floor(numeric(body.max_tokens,old.max_tokens??600,1,131072)),input_price_per_million:numeric(body.input_price_per_million,old.input_price_per_million??null,0,10000),output_price_per_million:numeric(body.output_price_per_million,old.output_price_per_million??null,0,10000),is_default:Boolean(old.is_default),created_at:old.created_at||new Date().toISOString()};
+  return {id:old.id||newId('model'),name,label:name,provider,protocol,model,base_url:endpoint(body.base_url||old.base_url||preset.base_url),config_version:(old.config_version||0)+1,credential_id:old.credential_id||credentialId(),supports_tools:body.supports_tools==null?Boolean(old.supports_tools):body.supports_tools===true,fixed_temperature:numeric(body.fixed_temperature,old.fixed_temperature??null,0,protocol==='anthropic'?1:2),send_temperature:body.send_temperature==null?old.send_temperature!==false:body.send_temperature===true,max_tokens_parameter:param,capabilities:{text:true,vision:body.capabilities?.vision??old.capabilities?.vision??false},max_images:body.max_images??old.max_images??(preset.supports_vision?5:0),temperature:numeric(body.temperature,old.temperature??0,0,protocol==='anthropic'?1:2),max_tokens:Math.floor(numeric(body.max_tokens,old.max_tokens??600,1,131072)),input_price_per_million:numeric(body.input_price_per_million,old.input_price_per_million??null,0,10000),output_price_per_million:numeric(body.output_price_per_million,old.output_price_per_million??null,0,10000),is_default:Boolean(old.is_default),created_at:old.created_at||new Date().toISOString()};
 }
 function visible(m,owner){const {owner_hash,...safe}=m;const ready=Boolean(getCredential(m.credential_id,owner));return {...safe,kind:'chat',mode:'live',ready,has_key:ready,key_masked:ready?'••••••••':'',default:m.is_default,connection_status:ready?(m.last_test||{category:'untested',message:'尚未测试'}):{category:'missing_key',message:'请补充 API Key'}};}
 export function listModels(owner){return all().filter(m=>m.owner_hash===owner).map(m=>visible(m,owner));}

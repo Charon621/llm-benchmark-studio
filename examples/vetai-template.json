@@ -1,0 +1,63 @@
+{
+  "template_id": "vetai-skin-lesion",
+  "name": "VetAI · 犬猫皮损视觉评测",
+  "description": "专业评测模板：犬猫皮损形态识别、图像质量与拒答、多图理解。这是平台的可选预设，不是默认评测标准。",
+  "version": "1.0",
+  "task_templates": {
+    "lesion": {
+      "id": "A-客观皮损识别",
+      "instruction": "只要求模型描述图片中能够直接观察到的皮损形态。不要求输出最终疾病诊断。",
+      "prompt_template": "你是严谨的兽医视觉分析助手。观察图片中能够直接观察到的皮损形态特征。不要给出最终疾病诊断。\n\n请仅输出合法 JSON：\n{\n  \"observed_features\": [\"从图片中直接观察到的皮损形态标签\"],\n  \"description\": \"对皮损的客观描述\",\n  \"abstain\": false,\n  \"abstain_reason\": \"\",\n  \"missing_information\": []\n}\n\n当图片严重模糊、关键区域被遮挡、或任务所需信息无法从图片获得时，设 \"abstain\": true。\n\n问题：{{question}}",
+      "metrics": ["label_precision", "label_recall", "label_f1", "exact_match", "hallucination_flags", "stability"]
+    },
+    "differential": {
+      "id": "B-候选疾病分析",
+      "instruction": "结合图片和已提供病史，让模型输出候选疾病及支持依据。准确性评价必须依赖合适的兽医参考诊断。",
+      "prompt_template": "你是兽医助手。结合图片和以下病史，列出候选疾病及支持依据。不确定时明确说明。\n\n病史：{{question}}\n\n请输出 JSON：\n{\"candidates\":[{\"disease\":\"\",\"evidence\":[],\"confidence\":\"high|medium|low\"}],\"missing_information\":[]}",
+      "metrics": ["output_comparison", "stability", "compliance"],
+      "note": "需要兽医参考诊断才能计算诊断准确性；仅有图片和模型输出时只能做输出比较。"
+    },
+    "abstention": {
+      "id": "C-图像质量与拒答",
+      "instruction": "提供清晰、模糊、遮挡等不同图片，判断模型是否合理拒答。",
+      "prompt_template": "请判断这张图片是否足以支持皮损形态识别。如果不足以判断请拒答。\n\n请输出 JSON：\n{\"observed_features\":[],\"description\":\"\",\"abstain\":false,\"abstain_reason\":\"\",\"missing_information\":[]}",
+      "metrics": ["abstention_quality", "correct_abstain_rate", "wrong_abstain_rate", "forced_answer_rate"]
+    },
+    "multi-image": {
+      "id": "D-多图理解",
+      "instruction": "比较单张图片与多张图片输入时的模型表现。整体图、局部特写图、整体图+局部特写图。",
+      "prompt_template": "请综合以下多张图片（按顺序：整体图、局部特写等）进行分析。描述皮损形态特征。\n\n请输出 JSON：\n{\"observed_features\":[],\"description\":\"\",\"abstain\":false,\"abstain_reason\":\"\",\"missing_information\":[]}",
+      "metrics": ["label_precision", "label_recall", "label_f1", "stability"],
+      "note": "对照实验观察增加图片是否带来表现变化；不能默认多图一定优于单图。"
+    }
+  },
+  "label_vocabulary": {
+    "version": "1.0",
+    "description": "兽医皮肤病受控标签词表。可从 JSON 导入正式标签定义及同义词。",
+    "labels": [
+      "脱毛", "鳞屑", "红斑", "结痂", "丘疹", "脓疱", "糜烂", "溃疡", "结节", "色素沉着", "苔藓化", "抓痕"
+    ],
+    "synonyms": {
+      "脱毛": ["毛发脱落", "局部缺毛", "掉毛", "alopecia", "hair loss"],
+      "鳞屑": ["皮屑", "脱屑", "scale", "scaling"],
+      "红斑": ["发红", "红肿", "erythema", "redness"],
+      "结痂": ["痂皮", "crust", "scab"],
+      "丘疹": ["小疙瘩", "papule"],
+      "脓疱": ["脓点", "pustule"],
+      "糜烂": ["表皮破损", "erosion"],
+      "溃疡": ["溃烂", "ulcer"],
+      "结节": ["硬块", "nodule"],
+      "色素沉着": ["色素沉淀", "hyperpigmentation"],
+      "苔藓化": ["皮肤增厚", "lichenification"],
+      "抓痕": ["搔抓痕迹", "excoriation"]
+    }
+  },
+  "evaluation_principles": [
+    "先做皮损形态识别 F1、视觉幻觉分析和合理拒答评测，再扩展到临床疾病候选评价。",
+    "不能把皮损标签直接当作疾病真值。",
+    "只有人工参考标注足够完整时才计算准确性指标。",
+    "不能假定 160 例犬猫皮肤图像数据已具有完整的兽医确诊标签。",
+    "如果只有图片和模型输出、没有可靠参考标注，只能开展输出比较、稳定性、结构化合规性等评价。",
+    "不能凭空计算诊断准确率。"
+  ]
+}

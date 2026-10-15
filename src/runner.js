@@ -16,11 +16,15 @@ export function launch(input, frozen=null, owner=null, {forkWorker=fork}={}) {
   const upgrade=model=>model?.key_env?{...model,provider:model.provider||model.key_env.replace(/_API_KEY$/,'').toLowerCase(),protocol:model.protocol||'openai',credential_id:model.credential_id||`env-${model.key_env.replace(/_API_KEY$/,'').toLowerCase()}`} : model;
   snapshot.models=snapshot.models.map(upgrade);if(snapshot.judge)snapshot.judge.model=upgrade(snapshot.judge.model);
   // 复跑也重新检查实时授权与密钥，但保留原配置内容。
-  if (frozen?.execution_mode==='live' && (!input.confirm_live||snapshot.models.some(m=>m.key_env)&&process.env.STUDIO_ENABLE_LIVE!=='1')) throw new Error('实时复跑需要明确确认，环境变量模型还须 STUDIO_ENABLE_LIVE=1');
+  if (frozen?.execution_mode==='live') {
+    if (input.confirm_live !== true || (snapshot.models.some(m=>m.key_env) && process.env.STUDIO_ENABLE_LIVE!=='1')) throw new Error('实时复跑需要明确确认，环境变量模型还须 STUDIO_ENABLE_LIVE=1');
+    if (snapshot.task_type==='vision' && input.confirm_vision_upload !== true) throw new Error('视觉复跑会将图片发送给模型供应商，需重新确认图片出站授权');
+  }
   const selected=[...snapshot.models,...(snapshot.judge?[snapshot.judge.model]:[])];
-  if(owner&&owner!==primaryOwner()&&selected.some(m=>m.key_env))throw new Error('环境变量凭证仅授权首次本机会话');
+  // Read environment credentials only after checking the persistent local owner.
+  if(selected.some(m=>m.key_env)&&owner!==primaryOwner())throw new Error('环境凭证仅允许本机原会话使用');
   const credentials=selected.filter(m=>m.kind==='chat'||m.model_config_id).map(m=>{const key=m.key_env?process.env[m.key_env]:getCredential(m.credential_id,owner);if(!key)throw new Error('冻结配置的凭证已删除或服务重启，不能复跑；请补充 Key 并创建新实验');return [m.credential_id||`env-${m.provider||'qwen'}`,key];});
-  const config=promptfooConfig(snapshot,dir);
+  const config=promptfooConfig(snapshot,dir,owner);
   fs.mkdirSync(dir,{recursive:true});
   atomic(path.join(dir,'snapshot.json'),snapshot);
   atomic(path.join(dir,'promptfooconfig.json'),config);

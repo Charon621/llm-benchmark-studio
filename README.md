@@ -1,5 +1,7 @@
 # LLM Benchmark Studio
 
+> 2026-10-15 修复说明与当前本机验收：[使用、恢复和验收记录](docs/视觉工作流与验收_2026-10-15.md)。历史章节中的测试数字保留为当时快照；真实云端模型验证仍待具体授权。
+
 一个基于 **Promptfoo 0.124.1** 的本地中文评测工作台。它调用 Promptfoo 的原生 `evaluate()`、`is-json`、`contains`、`javascript` 和可选 `llm-rubric`，围绕原生引擎提供提示词版本、数据导入、冻结配置、稳定性、失败案例和实验审计。
 
 **已验证 Mock 流水线、原生 Promptfoo 多选矩阵和 OpenAI/Anthropic 本地协议夹具；没有发起真实云端模型付费调用。** Mock 模型直接读取人工参考答案，含预置错误；这些分数不能证明模型能力或 Agent 架构优劣。可在网页「模型管理」填写自己的账号模型与密钥，再明确授权连接测试或实验。
@@ -151,7 +153,7 @@ Judge可能存在位置、风格、同源和幻觉偏差。建议随机抽样人
 
 ## 数据导入与人工复核
 
-CSV模板见 `examples/import-example.csv`，JSON示例见 `examples/research-cases.json`。每条样本必须有 `question`、人工`reference`和`facts`；`facts`在CSV用`|`分隔，JSON用字符串数组。可选 `difficulty`、`expect_json`、`assertions`、`source_urls`。
+CSV模板见 `examples/import-example.csv`，JSON示例见 `examples/research-cases.json`。文本样本必须有 `question`、人工`reference`和`facts`；`facts`在CSV用`|`分隔，JSON用字符串数组。可选 `difficulty`、`expect_json`、`assertions`、`source_urls`。视觉样本使用 images、ground_truth 和 annotation 独立结构。
 
 仅接受 `contains`、`icontains`、`not-contains`、`equals`、`is-json`断言，导入不会执行任意JavaScript。JSON任务的参考答案须是字符串字段对象，原生schema据此约束同名必需字段和类型。
 
@@ -214,6 +216,10 @@ POST /api/runs
 ```
 
 本地自动化覆盖原有24单元 Mock 原生Promptfoo矩阵与新增16单元 OpenAI/Anthropic混合协议矩阵、模型CRUD/默认/凭证版本恢复、会话实验全部入口隔离、旧记录迁移与 `.env` 归属、JSON错误不反射密钥、SSRF/DNS固定/重定向拒绝、HTTP错误分类、重试与未知费用。测试HTTP服务是本机夹具，不使用云端模型Key。GitHub Actions定义了Windows/Ubuntu Node24检查；远端CI实际状态以仓库Actions为准。
+
+## 界面设计
+
+`public/` 为无构建步骤的中文工作台：白 / 浅灰底色配深蓝强调色，统一 SVG 描边图标，不使用外部字体或 CDN。顶部导航分为概览、实验、结果分析、数据集、提示词、模型管理与方法。概览页汇总实验统计、性能 / 延迟 / 成本图表（纯 SVG 绘制，只用真实实验数据，未知费用明确标未知）与最近实验；新建实验为五步向导（模型 → 数据集 → 提示词 → 参数 → 确认），启动前展示完整配置、预计执行单元数与实时费用授权；结果分析页提供进度与取消、模型对比、提示词敏感性、可调权重排行榜、失败案例筛选与人工复核弹窗。表格支持横向滚动与粘性表头，界面适配桌面、平板与手机宽度，支持键盘焦点与系统减少动态设置。
 
 ## 框架依据与范围
 

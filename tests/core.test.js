@@ -43,7 +43,7 @@ test('unknown cost/tokens stay null, missing weighted dimensions exclude ranking
 });
 test('live runs are explicitly gated without reading or transmitting secrets',()=>{
   const old=process.env.STUDIO_ENABLE_LIVE;delete process.env.STUDIO_ENABLE_LIVE;
-  assert.throws(()=>freezeConfig({dataset_id:'test',prompt_ids:['a'],model_ids:['live-qwen']},lib,'run-live'),/未启用/);
+  assert.throws(()=>freezeConfig({dataset_id:'test',prompt_ids:['a'],model_ids:['live-qwen']},lib,'run-live'),/未启用|原会话/);
   if(old!=null)process.env.STUDIO_ENABLE_LIVE=old;
 });
 test('completed repeat groups cannot hide completely unstarted cells in a partial matrix',()=>{

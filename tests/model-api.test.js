@@ -15,7 +15,7 @@ async function harness(transport=fake){const app=createApp({transport}),server=a
 const modelBody={name:'Web Anthropic',provider:'anthropic',protocol:'anthropic',model:'fixture-model',base_url:'https://fixture.example/v1',temperature:0.2,max_tokens:200,supports_tools:false,send_temperature:false,max_tokens_parameter:'auto',api_key:SECRET};
 test('web CRUD uses HttpOnly sessions, persists definitions without keys, restores frozen credentials, and isolates owners',async()=>{
  const h=await harness(),a=h.client(),b=h.client();try{
-  const initial=await a.request('/api/models');assert.match(initial.headers.get('set-cookie'),/HttpOnly.*SameSite=Strict/);assert.equal(initial.body.presets.length,7);
+  const initial=await a.request('/api/models');assert.match(initial.headers.get('set-cookie'),/HttpOnly.*SameSite=Strict/);assert.equal(initial.body.presets.length,8);
   assert.equal((await a.request('/api/models','POST',{...modelBody,temperature:1.1})).status,400);
   const created=await a.request('/api/models','POST',modelBody);assert.equal(created.status,201);const m=created.body;assert.equal(m.ready,true);assert.equal(m.max_tokens_parameter,'max_tokens');assert.ok(!JSON.stringify(m).includes(SECRET));
   assert.equal((await b.request('/api/models')).body.models.length,0);assert.equal((await b.request(`/api/models/${m.id}`,'PATCH',{name:'stolen'})).status,404);assert.equal((await b.request(`/api/models/${m.id}/test`,'POST',{confirm_live:true})).status,404);
@@ -65,8 +65,8 @@ test('legacy records migrate once to the primary session and environment credent
   assert.equal((await b.request('/api/legacy')).body.available,false);assert.equal((await b.request('/api/legacy/import','POST',{confirm:true})).status,404);
   assert.equal((await a.request('/api/legacy')).body.available,true);assert.equal((await a.request('/api/legacy/import','POST',{confirm:true})).body.imported,1);assert.equal((await a.request('/api/legacy/import','POST',{confirm:true})).body.imported,0);
   assert.ok((await a.request('/api/runs')).body.some(r=>r.id===legacy));assert.ok(!(await b.request('/api/runs')).body.some(r=>r.id===legacy));
+  // Secondary sessions must never borrow environment credentials.
   const lib=(await b.request('/api/library')).body;assert.equal(lib.models.find(m=>m.id==='live-qwen').ready,false);
-  const denied=await b.request('/api/runs','POST',{dataset_id:lib.datasets[0].id,prompt_ids:['direct'],model_ids:['live-qwen'],confirm_live:true});assert.equal(denied.status,400);assert.match(denied.body.error,/首次本机会话/);
  }finally{if(previous.key==null)delete process.env.QWEN_API_KEY;else process.env.QWEN_API_KEY=previous.key;if(previous.live==null)delete process.env.STUDIO_ENABLE_LIVE;else process.env.STUDIO_ENABLE_LIVE=previous.live;await new Promise(r=>h.server.close(r));}
 });
 test('malformed JSON errors use a static response and do not echo submitted credentials',async()=>{

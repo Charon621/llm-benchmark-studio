@@ -1,0 +1,98 @@
+[
+  {
+    "id": "v-001",
+    "task_type": "vision",
+    "question": "请描述图片中能够直接观察到的皮损形态。不要给出最终疾病诊断。",
+    "images": [
+      { "asset_id": "sha256:placeholder", "role": "overview" }
+    ],
+    "ground_truth": {
+      "lesion_labels": ["脱毛", "鳞屑", "红斑"],
+      "answerability": "answerable",
+      "label_completeness": "complete"
+    },
+    "annotation": {
+      "source": "human",
+      "review_status": "reviewed"
+    },
+    "difficulty": "medium",
+    "task_template": "lesion"
+  },
+  {
+    "id": "v-002",
+    "task_type": "vision",
+    "question": "请识别图片中的皮损特征。",
+    "images": [
+      { "asset_id": "sha256:placeholder", "role": "overview" },
+      { "asset_id": "sha256:placeholder2", "role": "closeup" }
+    ],
+    "ground_truth": {
+      "lesion_labels": ["结痂", "丘疹"],
+      "answerability": "answerable",
+      "label_completeness": "complete"
+    },
+    "annotation": {
+      "source": "human",
+      "review_status": "reviewed"
+    },
+    "difficulty": "simple",
+    "task_template": "lesion"
+  },
+  {
+    "id": "v-003",
+    "task_type": "vision",
+    "question": "图片是否足以判断皮损形态？如果不足以判断请拒答。",
+    "images": [
+      { "asset_id": "sha256:placeholder-blur", "role": "overview" }
+    ],
+    "ground_truth": {
+      "lesion_labels": [],
+      "answerability": "unanswerable",
+      "label_completeness": "complete"
+    },
+    "annotation": {
+      "source": "human",
+      "review_status": "reviewed"
+    },
+    "difficulty": "simple",
+    "task_template": "abstention"
+  },
+  {
+    "id": "v-004",
+    "task_type": "vision",
+    "question": "描述图片中可见的皮肤改变。",
+    "images": [
+      { "asset_id": "sha256:placeholder", "role": "overview" }
+    ],
+    "ground_truth": {
+      "lesion_labels": ["红斑"],
+      "label_completeness": "incomplete"
+    },
+    "annotation": {
+      "source": "human",
+      "review_status": "pending"
+    },
+    "difficulty": "medium",
+    "task_template": "lesion"
+  },
+  {
+    "id": "v-005",
+    "task_type": "vision",
+    "question": "对比整体图与局部特写图，综合描述皮损特征。",
+    "images": [
+      { "asset_id": "sha256:placeholder", "role": "overview" },
+      { "asset_id": "sha256:placeholder2", "role": "closeup" }
+    ],
+    "ground_truth": {
+      "lesion_labels": ["脱毛", "鳞屑", "红斑", "结痂"],
+      "answerability": "answerable",
+      "label_completeness": "complete"
+    },
+    "annotation": {
+      "source": "human",
+      "review_status": "reviewed"
+    },
+    "difficulty": "hard",
+    "task_template": "multi-image"
+  }
+]
