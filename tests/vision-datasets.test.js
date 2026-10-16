@@ -35,7 +35,7 @@ test('hash verification rejects file corruption and foreign access',async()=>{
  const bytes=await sharp({create:{width:2,height:2,channels:3,background:'#abc'}}).png().toBuffer();
  const a=await importImage({buffer:bytes,filename:'check.png'},owner);assertAssetsExist([{asset_id:a.asset_id}],owner);
  assert.throws(()=>assertAssetsExist([{asset_id:a.asset_id}],'foreign'),/不存在/);
- const file=path.join(process.env.STUDIO_DATA_DIR,'assets',a.sha256.slice(0,2),a.sha256);fs.writeFileSync(file,'corrupt');assert.throws(()=>readAssetBytes(a.asset_id,owner),/哈希不匹配/);fs.writeFileSync(file,bytes);
+ const {DATA}=await import('../src/storage.js');const file=path.join(DATA,'assets',a.sha256.slice(0,2),a.sha256);fs.writeFileSync(file,'corrupt');assert.throws(()=>readAssetBytes(a.asset_id,owner),/哈希不匹配/);fs.writeFileSync(file,bytes);
 });
 test('owner deletion preserves shared blob, restores access and denies foreign recovery',async()=>{
  const a=await importImage({buffer:PNG_1x1,filename:'shared.png'},owner);await importImage({buffer:PNG_1x1,filename:'shared.png'},'second-owner');
