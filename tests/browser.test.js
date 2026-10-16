@@ -100,6 +100,20 @@ describe('Browser: viewport responsiveness', () => {
         document.documentElement.scrollWidth > document.documentElement.clientWidth + 5
       );
       assert.ok(!overflow, `horizontal overflow at ${width}px`);
+      // Font fallback differs across Windows and Linux. Keep the full action
+      // reachable even when the brand and Chinese glyphs occupy more space.
+      const fallback = await page.addStyleTag({ content: ':root{--font-sans:serif}' });
+      try {
+        const bounds = await page.evaluate(() => {
+          const action = document.querySelector('#cta-new-run').getBoundingClientRect();
+          return { scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth,
+            actionLeft: action.left, actionRight: action.right };
+        });
+        assert.ok(bounds.scroll <= bounds.client + 5, `font fallback overflow at ${width}px: ${JSON.stringify(bounds)}`);
+        assert.ok(bounds.actionLeft >= 0 && bounds.actionRight <= bounds.client, 'new experiment action remains in viewport');
+      } finally {
+        await fallback.evaluate(element => element.remove());
+      }
     });
   }
 });
